@@ -72,9 +72,13 @@ class NotificationService: NSObject {
         // Create trigger for immediate delivery
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
 
-        // Create request
+        // Create request with unique identifier based on message content
+        // Use conversationId + senderName + first few words of message to ensure uniqueness
+        let messagePreview = messageText.prefix(20).replacingOccurrences(of: " ", with: "_")
+        let uniqueId = "message-\(conversationId)-\(senderName)-\(messagePreview)"
+
         let request = UNNotificationRequest(
-            identifier: "message-\(conversationId)-\(Date().timeIntervalSince1970)",
+            identifier: uniqueId,
             content: content,
             trigger: trigger
         )
@@ -120,12 +124,13 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let userInfo = notification.request.content.userInfo
-        
-        print("📬 Received notification in FOREGROUND")
+
+        print("📬 Presenting notification in FOREGROUND")
+        print("   ID: \(notification.request.identifier)")
         print("   Title: \(notification.request.content.title)")
         print("   Body: \(notification.request.content.body)")
         print("   UserInfo: \(userInfo)")
-        
+
         // Show banner, badge, and play sound
         completionHandler([.banner, .badge, .sound])
     }

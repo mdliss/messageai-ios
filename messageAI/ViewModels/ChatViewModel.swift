@@ -59,28 +59,47 @@ class ChatViewModel: ObservableObject {
         
         // Subscribe to Firestore for real-time updates
         messageTask = Task {
-            var previousMessageCount = 0
+            var processedMessageIds = Set<String>()
+            var isConversationCurrentlyOpen = false
 
             for await fetchedMessages in firestoreService.subscribeToMessages(conversationId: conversationId) {
                 self.messages = fetchedMessages
                 self.isLoading = false
 
-                // Check for new messages from other users
-                let newMessages = Array(fetchedMessages.dropFirst(previousMessageCount))
-                previousMessageCount = fetchedMessages.count
+                // Check if conversation state has changed
+                let wasConversationOpen = isConversationCurrentlyOpen
+                isConversationCurrentlyOpen = appStateService.isConversationOpen(conversationId)
 
+                // If conversation just became active, clear processed messages
+                if !wasConversationOpen && isConversationCurrentlyOpen {
+                    print("💬 Conversation became active - clearing processed message history")
+                    processedMessageIds.removeAll()
+                }
+
+                // Check for new messages from other users that haven't been processed
+                let newMessages = fetchedMessages.filter { message in
+                    // Only process messages that:
+                    // 1. Haven't been processed before (not in our set)
+                    // 2. Are not from current user
+                    // 3. Conversation is not currently open
+                    !processedMessageIds.contains(message.id) &&
+                    message.senderId != currentUserId &&
+                    !isConversationCurrentlyOpen
+                }
+
+                // Mark these messages as processed
                 for message in newMessages {
-                    // Only trigger notification if:
-                    // 1. Message is not from current user
-                    // 2. Conversation is not currently open
-                    if message.senderId != currentUserId && !appStateService.isConversationOpen(conversationId) {
-                        print("📬 Triggering local notification for message from \(message.senderName)")
-                        notificationService.triggerLocalNotification(
-                            senderName: message.senderName,
-                            messageText: message.previewText,
-                            conversationId: conversationId
-                        )
-                    }
+                    processedMessageIds.insert(message.id)
+                }
+
+                // Trigger notifications for new messages
+                for message in newMessages {
+                    print("📬 Triggering local notification for NEW message from \(message.senderName): \(message.previewText)")
+                    notificationService.triggerLocalNotification(
+                        senderName: message.senderName,
+                        messageText: message.previewText,
+                        conversationId: conversationId
+                    )
                 }
 
                 // Sync to Core Data in background

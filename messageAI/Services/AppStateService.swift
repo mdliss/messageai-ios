@@ -31,4 +31,10 @@ class AppStateService: ObservableObject {
     func isConversationOpen(_ conversationId: String) -> Bool {
         return currentConversationId == conversationId
     }
+
+    /// Clear the current conversation (when navigating away)
+    func clearCurrentConversation() {
+        print("📱 Clearing current conversation")
+        currentConversationId = nil
+    }
 }

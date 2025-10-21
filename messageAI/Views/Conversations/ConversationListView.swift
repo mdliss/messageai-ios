@@ -146,7 +146,7 @@ struct ConversationListView: View {
                     viewModel.loadConversations(userId: userId)
 
                     // Clear current conversation when returning to conversation list
-                    appState.setCurrentConversation(nil)
+                    appState.clearCurrentConversation()
 
                     // Ensure presence is set
                     Task {
