@@ -1,0 +1,39 @@
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcworkspace/contents.xcworkspacedata
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# CRITICAL - DO NOT COMMIT THESE!
+GoogleService-Info.plist
+Config.plist
+.env
+
+# Task Master
+.taskmaster/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+
+# Node (for Cloud Functions later)
+node_modules/
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
