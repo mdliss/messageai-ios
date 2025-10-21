@@ -55,6 +55,17 @@ struct ChatView: View {
                                 showSenderName: conversation.type == .group
                             )
                             .id(message.id)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                if message.isFromCurrentUser(userId: currentUserId) {
+                                    Button(role: .destructive) {
+                                        Task {
+                                            await viewModel.deleteMessage(message, currentUserId: currentUserId)
+                                        }
+                                    } label: {
+                                        Label("delete", systemImage: "trash")
+                                    }
+                                }
+                            }
                             .contextMenu {
                                 if message.status == .failed {
                                     Button {
@@ -63,6 +74,16 @@ struct ChatView: View {
                                         }
                                     } label: {
                                         Label("retry", systemImage: "arrow.clockwise")
+                                    }
+                                }
+                                
+                                if message.isFromCurrentUser(userId: currentUserId) {
+                                    Button(role: .destructive) {
+                                        Task {
+                                            await viewModel.deleteMessage(message, currentUserId: currentUserId)
+                                        }
+                                    } label: {
+                                        Label("delete", systemImage: "trash")
                                     }
                                 }
                             }

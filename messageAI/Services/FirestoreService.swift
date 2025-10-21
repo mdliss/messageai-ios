@@ -330,6 +330,20 @@ class FirestoreService {
         print("✅ Message status updated: \(messageId) → \(status.rawValue)")
     }
     
+    /// Delete message from Firestore
+    /// - Parameters:
+    ///   - messageId: Message ID to delete
+    ///   - conversationId: Conversation ID
+    func deleteMessage(messageId: String, conversationId: String) async throws {
+        let messageRef = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .document(messageId)
+        
+        try await messageRef.delete()
+        print("✅ Message deleted from Firestore: \(messageId)")
+    }
+    
     /// Mark messages as read
     /// - Parameters:
     ///   - conversationId: Conversation ID

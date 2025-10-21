@@ -384,6 +384,53 @@ class ChatViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Delete Message
+    
+    /// Delete a message
+    /// - Parameters:
+    ///   - message: Message to delete
+    ///   - currentUserId: Current user ID (only owner can delete)
+    func deleteMessage(_ message: Message, currentUserId: String) async {
+        // Only allow deleting own messages
+        guard message.senderId == currentUserId else {
+            errorMessage = "You can only delete your own messages"
+            print("❌ Cannot delete message: not the sender")
+            return
+        }
+        
+        guard let conversationId = conversationId else {
+            errorMessage = "No conversation selected"
+            return
+        }
+        
+        // Remove from local array immediately (optimistic UI)
+        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+            messages.remove(at: index)
+        }
+        
+        // Delete from Core Data
+        coreDataService.deleteMessage(messageId: message.id)
+        
+        // Delete from Firestore
+        do {
+            try await firestoreService.deleteMessage(messageId: message.id, conversationId: conversationId)
+            
+            // Delete image from storage if exists
+            if let imageURL = message.imageURL, !imageURL.isEmpty {
+                try? await storageService.deleteImageByURL(imageURL)
+            }
+            
+            print("✅ Message deleted successfully: \(message.id)")
+        } catch {
+            // Re-add message if deletion failed
+            messages.append(message)
+            messages.sort { $0.createdAt < $1.createdAt }
+            
+            errorMessage = "Failed to delete message: \(error.localizedDescription)"
+            print("❌ Failed to delete message: \(error.localizedDescription)")
+        }
+    }
+    
     // MARK: - Cleanup
     
     /// Clean up subscriptions
