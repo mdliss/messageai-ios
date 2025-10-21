@@ -59,8 +59,6 @@ struct MessageBubbleView: View {
             if isFromCurrentUser {
                 Spacer(minLength: 0)
                     .frame(width: 8)
-            } else {
-                Spacer()
             }
         }
         .padding(.vertical, 2)
