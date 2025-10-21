@@ -12,6 +12,10 @@ struct ConversationRowView: View {
     let conversation: Conversation
     let currentUserId: String
     
+    @State private var isOnline = false
+    
+    private let realtimeDBService = RealtimeDBService.shared
+    
     var body: some View {
         HStack(spacing: 12) {
             // Avatar
@@ -62,45 +66,77 @@ struct ConversationRowView: View {
     
     @ViewBuilder
     private var avatarView: some View {
-        if conversation.type == .group {
-            // Group avatar
-            Circle()
-                .fill(Color.purple.opacity(0.3))
-                .frame(width: 50, height: 50)
-                .overlay {
-                    Image(systemName: "person.3.fill")
-                        .foregroundStyle(.purple)
-                }
-        } else {
-            // Direct chat avatar
-            let otherUserId = conversation.participantIds.first { $0 != currentUserId }
-            let participant = conversation.participantDetails[otherUserId ?? ""]
-            
-            if let photoURL = participant?.photoURL, let url = URL(string: photoURL) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
+        ZStack(alignment: .bottomTrailing) {
+            if conversation.type == .group {
+                // Group avatar
+                Circle()
+                    .fill(Color.purple.opacity(0.3))
+                    .frame(width: 50, height: 50)
+                    .overlay {
+                        Image(systemName: "person.3.fill")
+                            .foregroundStyle(.purple)
+                    }
+            } else {
+                // Direct chat avatar
+                let otherUserId = conversation.participantIds.first { $0 != currentUserId }
+                let participant = conversation.participantDetails[otherUserId ?? ""]
+                
+                if let photoURL = participant?.photoURL, let url = URL(string: photoURL) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Circle()
+                            .fill(Color.blue.opacity(0.3))
+                            .overlay {
+                                Text(participant?.displayName.prefix(1).uppercased() ?? "?")
+                                    .foregroundStyle(.white)
+                                    .fontWeight(.semibold)
+                            }
+                    }
+                    .frame(width: 50, height: 50)
+                    .clipShape(Circle())
+                } else {
                     Circle()
                         .fill(Color.blue.opacity(0.3))
+                        .frame(width: 50, height: 50)
                         .overlay {
                             Text(participant?.displayName.prefix(1).uppercased() ?? "?")
                                 .foregroundStyle(.white)
                                 .fontWeight(.semibold)
                         }
                 }
-                .frame(width: 50, height: 50)
-                .clipShape(Circle())
-            } else {
-                Circle()
-                    .fill(Color.blue.opacity(0.3))
-                    .frame(width: 50, height: 50)
-                    .overlay {
-                        Text(participant?.displayName.prefix(1).uppercased() ?? "?")
-                            .foregroundStyle(.white)
-                            .fontWeight(.semibold)
-                    }
+                
+                // Online indicator for direct chats
+                if conversation.type == .direct {
+                    Circle()
+                        .fill(isOnline ? Color.green : Color.gray)
+                        .frame(width: 14, height: 14)
+                        .overlay {
+                            Circle()
+                                .stroke(Color(.systemBackground), lineWidth: 2)
+                        }
+                        .offset(x: 2, y: 2)
+                }
+            }
+        }
+        .onAppear {
+            subscribeToPresence()
+        }
+    }
+    
+    // MARK: - Presence Subscription
+    
+    private func subscribeToPresence() {
+        guard conversation.type == .direct else { return }
+        
+        let otherUserId = conversation.participantIds.first { $0 != currentUserId }
+        guard let otherUserId = otherUserId else { return }
+        
+        Task {
+            for await online in realtimeDBService.observePresence(userId: otherUserId) {
+                isOnline = online
             }
         }
     }

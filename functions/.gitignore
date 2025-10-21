@@ -1,0 +1,20 @@
+# Node modules
+node_modules/
+
+# Build output
+lib/
+
+# Firebase
+.runtimeconfig.json
+
+# Environment
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+

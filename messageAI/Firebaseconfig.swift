@@ -1,17 +1,23 @@
 import Foundation
 import Firebase
+import FirebaseCore
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
 import FirebaseDatabase
 
-class FirebaseConfig {
+final class FirebaseConfig {
     static let shared = FirebaseConfig()
     
     let auth: Auth
     let db: Firestore
     let storage: Storage
     let realtimeDB: DatabaseReference
+    
+    /// Configure Firebase (call this method manually if needed)
+    func configure() {
+        // Already configured in init
+    }
     
     private init() {
         // Configure Firebase

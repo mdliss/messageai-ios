@@ -11,12 +11,24 @@ import SwiftUI
 struct MessageInputView: View {
     @Binding var text: String
     let onSend: () -> Void
+    let onImageTap: () -> Void
     let isSending: Bool
+    let isUploadingImage: Bool
     
     @FocusState private var isFocused: Bool
     
     var body: some View {
         HStack(spacing: 12) {
+            // Image button
+            Button {
+                onImageTap()
+            } label: {
+                Image(systemName: "photo")
+                    .foregroundStyle(.blue)
+                    .font(.title3)
+            }
+            .disabled(isSending || isUploadingImage)
+            
             // Text input
             TextField("message", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -33,7 +45,7 @@ struct MessageInputView: View {
                 handleSend()
             } label: {
                 Group {
-                    if isSending {
+                    if isSending || isUploadingImage {
                         ProgressView()
                             .tint(.white)
                     } else {
@@ -46,7 +58,7 @@ struct MessageInputView: View {
                 .background(isSendEnabled ? Color.blue : Color.gray)
                 .clipShape(Circle())
             }
-            .disabled(!isSendEnabled || isSending)
+            .disabled(!isSendEnabled || isSending || isUploadingImage)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -77,7 +89,9 @@ struct MessageInputView: View {
         MessageInputView(
             text: .constant(""),
             onSend: {},
-            isSending: false
+            onImageTap: {},
+            isSending: false,
+            isUploadingImage: false
         )
     }
 }

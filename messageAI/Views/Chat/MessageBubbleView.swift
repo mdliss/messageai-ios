@@ -75,7 +75,7 @@ struct MessageBubbleView: View {
     // MARK: - Image Bubble
     
     private var imageBubble: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
             if let imageURL = message.imageURL, let url = URL(string: imageURL) {
                 AsyncImage(url: url) { image in
                     image

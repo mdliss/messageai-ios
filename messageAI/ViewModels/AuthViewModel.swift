@@ -9,6 +9,7 @@
 import Foundation
 import SwiftUI
 import Combine
+import FirebaseFirestore
 
 /// ViewModel managing authentication state
 @MainActor
@@ -19,6 +20,7 @@ class AuthViewModel: ObservableObject {
     @Published var isAuthenticated = false
     
     private let authService = AuthService.shared
+    private let realtimeDBService = RealtimeDBService.shared
     private var cancellables = Set<AnyCancellable>()
     
     init() {
@@ -84,6 +86,10 @@ class AuthViewModel: ObservableObject {
             let user = try await authService.signIn(email: email, password: password)
             currentUser = user
             isAuthenticated = true
+            
+            // Set user online in Realtime DB
+            await realtimeDBService.setUserOnline(userId: user.id)
+            
             print("✅ Sign in successful")
         } catch {
             // Firebase error handling
@@ -129,6 +135,13 @@ class AuthViewModel: ObservableObject {
     
     /// Sign out current user
     func signOut() {
+        // Set user offline before signing out
+        if let userId = currentUser?.id {
+            Task {
+                await realtimeDBService.setUserOffline(userId: userId)
+            }
+        }
+        
         do {
             try authService.signOut()
             currentUser = nil

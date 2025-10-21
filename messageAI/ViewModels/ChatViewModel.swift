@@ -7,7 +7,9 @@
 //
 
 import Foundation
+import SwiftUI
 import Combine
+import FirebaseFirestore
 
 /// ViewModel managing chat functionality
 @MainActor
@@ -16,9 +18,11 @@ class ChatViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var isSending = false
+    @Published var isUploadingImage = false
     
     private let firestoreService = FirestoreService.shared
     private let coreDataService = CoreDataService.shared
+    private let storageService = StorageService.shared
     private var messageTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     
@@ -139,6 +143,87 @@ class ChatViewModel: ObservableObject {
         }
         
         isSending = false
+    }
+    
+    // MARK: - Send Image Message
+    
+    /// Send image message with optimistic UI
+    /// - Parameters:
+    ///   - image: UIImage to send
+    ///   - caption: Optional caption text
+    ///   - senderId: Sender ID
+    ///   - senderName: Sender name
+    ///   - senderPhotoURL: Sender photo URL
+    func sendImageMessage(image: UIImage, caption: String = "", senderId: String, senderName: String, senderPhotoURL: String? = nil) async {
+        guard let conversationId = conversationId else {
+            errorMessage = "No conversation selected"
+            return
+        }
+        
+        isUploadingImage = true
+        
+        // Compress image
+        guard let compressedImage = ImageCompressor.compressAndResize(image) else {
+            errorMessage = "Failed to compress image"
+            isUploadingImage = false
+            return
+        }
+        
+        // Generate local ID
+        let localId = UUID().uuidString
+        
+        do {
+            // Upload image to Storage
+            let imageURL = try await storageService.uploadMessageImage(compressedImage, conversationId: conversationId)
+            
+            // Create message
+            let message = Message(
+                id: localId,
+                conversationId: conversationId,
+                senderId: senderId,
+                senderName: senderName,
+                senderPhotoURL: senderPhotoURL,
+                type: .image,
+                text: caption,
+                imageURL: imageURL,
+                createdAt: Date(),
+                status: .sending,
+                localId: localId,
+                isSynced: false
+            )
+            
+            // Optimistic UI - add message immediately
+            messages.append(message)
+            
+            // Save to Core Data
+            coreDataService.saveMessage(message)
+            
+            // Upload to Firestore
+            let serverId = try await firestoreService.sendMessage(message, to: conversationId)
+            
+            // Update message with server ID
+            if let index = messages.firstIndex(where: { $0.localId == localId }) {
+                messages[index].id = serverId
+                messages[index].status = .sent
+                messages[index].isSynced = true
+                
+                // Update Core Data
+                coreDataService.updateMessageSync(localId: localId, serverId: serverId)
+            }
+            
+            print("✅ Image message sent successfully: \(serverId)")
+        } catch {
+            // Mark as failed
+            if let index = messages.firstIndex(where: { $0.localId == localId }) {
+                messages[index].status = .failed
+                coreDataService.updateMessageStatus(messageId: localId, status: .failed)
+            }
+            
+            errorMessage = "Failed to send image: \(error.localizedDescription)"
+            print("❌ Failed to send image: \(error.localizedDescription)")
+        }
+        
+        isUploadingImage = false
     }
     
     // MARK: - Mark Messages as Read

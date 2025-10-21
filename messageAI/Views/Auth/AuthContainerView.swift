@@ -59,55 +59,9 @@ struct MainTabView: View {
 
 // ConversationListView moved to separate file
 
-/// Temporary decisions view (will be replaced in PR #19)
-struct DecisionsView: View {
-    var body: some View {
-        NavigationStack {
-            VStack {
-                Image(systemName: "list.clipboard")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.purple.opacity(0.3))
-                    .padding()
-                
-                Text("decisions")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text("team decisions will be tracked here")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding()
-            }
-            .navigationTitle("decisions")
-        }
-    }
-}
+// DecisionsView moved to separate file
 
-/// Temporary AI assistant view (will be replaced in PR #20B)
-struct AIAssistantView: View {
-    var body: some View {
-        NavigationStack {
-            VStack {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.purple.opacity(0.3))
-                    .padding()
-                
-                Text("ai assistant")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text("your ai assistant will help you here")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding()
-            }
-            .navigationTitle("ai assistant")
-        }
-    }
-}
+// AIAssistantView moved to separate file
 
 #Preview {
     AuthContainerView()

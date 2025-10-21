@@ -7,7 +7,9 @@
 //
 
 import Foundation
+import SwiftUI
 import Combine
+import FirebaseFirestore
 
 /// ViewModel managing conversation list and operations
 @MainActor

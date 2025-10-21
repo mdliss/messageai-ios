@@ -9,7 +9,7 @@
 import Foundation
 
 /// Message model representing a chat message
-struct Message: Codable, Identifiable, Equatable {
+struct Message: Codable, Identifiable, Equatable, Hashable {
     var id: String
     let conversationId: String
     let senderId: String

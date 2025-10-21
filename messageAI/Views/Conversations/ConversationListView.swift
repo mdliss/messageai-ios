@@ -12,6 +12,8 @@ struct ConversationListView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = ConversationViewModel()
     @State private var showUserPicker = false
+    @State private var showGroupCreation = false
+    @State private var showSearch = false
     @State private var selectedConversation: Conversation?
     
     var body: some View {
@@ -70,9 +72,27 @@ struct ConversationListView: View {
             }
             .navigationTitle("chats")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        showUserPicker = true
+                        showSearch = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                }
+                
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            showUserPicker = true
+                        } label: {
+                            Label("new message", systemImage: "message")
+                        }
+                        
+                        Button {
+                            showGroupCreation = true
+                        } label: {
+                            Label("new group", systemImage: "person.3")
+                        }
                     } label: {
                         Image(systemName: "square.and.pencil")
                     }
@@ -89,6 +109,19 @@ struct ConversationListView: View {
                         }
                     )
                 }
+            }
+            .sheet(isPresented: $showGroupCreation) {
+                if let currentUser = authViewModel.currentUser {
+                    GroupCreationView(
+                        currentUser: currentUser,
+                        onCreateGroup: { conversation in
+                            selectedConversation = conversation
+                        }
+                    )
+                }
+            }
+            .sheet(isPresented: $showSearch) {
+                SearchView()
             }
             .navigationDestination(item: $selectedConversation) { conversation in
                 if let currentUserId = authViewModel.currentUser?.id {

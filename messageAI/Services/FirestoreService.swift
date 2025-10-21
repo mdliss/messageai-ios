@@ -100,7 +100,6 @@ class FirestoreService {
         AsyncStream { continuation in
             let conversationsRef = db.collection("conversations")
                 .whereField("participantIds", arrayContains: userId)
-                .order(by: "updatedAt", descending: true)
             
             let listener = conversationsRef.addSnapshotListener { snapshot, error in
                 if let error = error {
@@ -118,8 +117,11 @@ class FirestoreService {
                     try? document.data(as: Conversation.self)
                 }
                 
-                continuation.yield(conversations)
-                print("✅ Fetched \(conversations.count) conversations")
+                // Sort by updatedAt descending (most recent first)
+                let sortedConversations = conversations.sorted { $0.updatedAt > $1.updatedAt }
+                
+                continuation.yield(sortedConversations)
+                print("✅ Fetched \(sortedConversations.count) conversations")
             }
             
             continuation.onTermination = { _ in

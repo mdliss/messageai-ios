@@ -13,7 +13,12 @@ struct ChatView: View {
     let currentUserId: String
     
     @StateObject private var viewModel = ChatViewModel()
+    @StateObject private var aiViewModel = AIInsightsViewModel()
     @State private var messageText = ""
+    @State private var showImagePicker = false
+    @State private var selectedImage: UIImage?
+    @State private var showFullScreenImage: Message?
+    @State private var showAIMenu = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -30,6 +35,19 @@ struct ChatView: View {
                                 .padding()
                         }
                         
+                        // AI Insights
+                        ForEach(aiViewModel.insights) { insight in
+                            AIInsightCardView(insight: insight) {
+                                Task {
+                                    await aiViewModel.dismissInsight(
+                                        insightId: insight.id,
+                                        conversationId: conversation.id
+                                    )
+                                }
+                            }
+                        }
+                        
+                        // Messages
                         ForEach(viewModel.messages) { message in
                             MessageBubbleView(
                                 message: message,
@@ -72,7 +90,11 @@ struct ChatView: View {
             MessageInputView(
                 text: $messageText,
                 onSend: sendMessage,
-                isSending: viewModel.isSending
+                onImageTap: {
+                    showImagePicker = true
+                },
+                isSending: viewModel.isSending,
+                isUploadingImage: viewModel.isUploadingImage
             )
         }
         .navigationTitle(conversation.displayName(for: currentUserId))
@@ -90,15 +112,61 @@ struct ChatView: View {
                     }
                 }
             }
+            
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        Task {
+                            try? await aiViewModel.summarize(conversationId: conversation.id)
+                        }
+                    } label: {
+                        Label("summarize", systemImage: "doc.text")
+                    }
+                    
+                    Button {
+                        Task {
+                            try? await aiViewModel.extractActionItems(conversationId: conversation.id)
+                        }
+                    } label: {
+                        Label("action items", systemImage: "checklist")
+                    }
+                } label: {
+                    Image(systemName: "sparkles")
+                }
+                .disabled(aiViewModel.isLoading)
+            }
         }
         .onAppear {
             viewModel.loadMessages(
                 conversationId: conversation.id,
                 currentUserId: currentUserId
             )
+            aiViewModel.subscribeToInsights(conversationId: conversation.id)
         }
         .onDisappear {
             viewModel.cleanup()
+            aiViewModel.cleanup()
+        }
+        .confirmationDialog("add photo", isPresented: $showImagePicker) {
+            Button("take photo") {
+                // Camera functionality will be added
+            }
+            
+            Button("choose from library") {
+                // For now, just a placeholder
+                // Full implementation in next iteration
+            }
+            
+            Button("cancel", role: .cancel) {}
+        }
+        .onChange(of: selectedImage) { _, newImage in
+            if let image = newImage {
+                sendImage(image)
+                selectedImage = nil
+            }
+        }
+        .sheet(item: $showFullScreenImage) { message in
+            FullScreenImageView(message: message)
         }
         .alert("error", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("ok") {
@@ -125,6 +193,91 @@ struct ChatView: View {
                 senderName: participant?.displayName ?? "You",
                 senderPhotoURL: participant?.photoURL
             )
+        }
+    }
+    
+    // MARK: - Send Image
+    
+    private func sendImage(_ image: UIImage) {
+        let participant = conversation.participantDetails[currentUserId]
+        
+        Task {
+            await viewModel.sendImageMessage(
+                image: image,
+                caption: "",
+                senderId: currentUserId,
+                senderName: participant?.displayName ?? "You",
+                senderPhotoURL: participant?.photoURL
+            )
+        }
+    }
+}
+
+/// Full-screen image viewer
+struct FullScreenImageView: View {
+    let message: Message
+    @Environment(\.dismiss) private var dismiss
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                if let imageURL = message.imageURL, let url = URL(string: imageURL) {
+                    AsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .scaleEffect(scale)
+                            .gesture(
+                                MagnificationGesture()
+                                    .onChanged { value in
+                                        scale = lastScale * value
+                                    }
+                                    .onEnded { _ in
+                                        lastScale = scale
+                                        
+                                        // Reset if too small or too large
+                                        if scale < 1 {
+                                            withAnimation {
+                                                scale = 1
+                                                lastScale = 1
+                                            }
+                                        } else if scale > 4 {
+                                            withAnimation {
+                                                scale = 4
+                                                lastScale = 4
+                                            }
+                                        }
+                                    }
+                            )
+                            .onTapGesture(count: 2) {
+                                // Double tap to reset zoom
+                                withAnimation {
+                                    scale = 1
+                                    lastScale = 1
+                                }
+                            }
+                    } placeholder: {
+                        ProgressView()
+                            .tint(.white)
+                    }
+                }
+            }
+            .navigationTitle(message.senderName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("done") {
+                        dismiss()
+                    }
+                    .foregroundStyle(.white)
+                }
+            }
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
         }
     }
 }

@@ -1,39 +1,57 @@
 # Xcode
-*.xcodeproj/*
-!*.xcodeproj/project.pbxproj
-!*.xcodeproj/xcshareddata/
-!*.xcworkspace/contents.xcworkspacedata
-*.xcuserstate
+.DS_Store
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
 xcuserdata/
-DerivedData/
+*.xccheckout
 *.moved-aside
+DerivedData/
 *.hmap
 *.ipa
-*.dSYM.zip
-*.dSYM
-
-# Swift Package Manager
+*.xcuserstate
+*.xcscmblueprint
 .swiftpm/
-.build/
 
-# CRITICAL - DO NOT COMMIT THESE!
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Firebase
 GoogleService-Info.plist
-Config.plist
+
+# Environment
 .env
+.env.local
 
-# Task Master
-.taskmaster/
+# Functions
+functions/node_modules/
+functions/lib/
+functions/.runtimeconfig.json
 
-# OS
+# Core Data
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# macOS
 .DS_Store
 
-# Logs
-*.log
-
-# Node (for Cloud Functions later)
-node_modules/
-npm-debug.log*
-
-# Editor
-.vscode/
+# IDEs
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+*.dSYM.zip
+*.dSYM
