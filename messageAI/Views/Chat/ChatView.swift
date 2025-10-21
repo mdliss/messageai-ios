@@ -28,69 +28,75 @@ struct ChatView: View {
             
             // Messages list
             ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        if viewModel.isLoading && viewModel.messages.isEmpty {
-                            ProgressView()
-                                .padding()
+                List {
+                    if viewModel.isLoading && viewModel.messages.isEmpty {
+                        ProgressView()
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
+                    
+                    // AI Insights
+                    ForEach(aiViewModel.insights) { insight in
+                        AIInsightCardView(insight: insight) {
+                            Task {
+                                await aiViewModel.dismissInsight(
+                                    insightId: insight.id,
+                                    conversationId: conversation.id
+                                )
+                            }
                         }
-                        
-                        // AI Insights
-                        ForEach(aiViewModel.insights) { insight in
-                            AIInsightCardView(insight: insight) {
-                                Task {
-                                    await aiViewModel.dismissInsight(
-                                        insightId: insight.id,
-                                        conversationId: conversation.id
-                                    )
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                    }
+                    
+                    // Messages
+                    ForEach(viewModel.messages) { message in
+                        MessageBubbleView(
+                            message: message,
+                            isFromCurrentUser: message.isFromCurrentUser(userId: currentUserId),
+                            showSenderName: conversation.type == .group
+                        )
+                        .id(message.id)
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if message.isFromCurrentUser(userId: currentUserId) {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await viewModel.deleteMessage(message, currentUserId: currentUserId)
+                                    }
+                                } label: {
+                                    Label("delete", systemImage: "trash")
                                 }
                             }
                         }
-                        
-                        // Messages
-                        ForEach(viewModel.messages) { message in
-                            MessageBubbleView(
-                                message: message,
-                                isFromCurrentUser: message.isFromCurrentUser(userId: currentUserId),
-                                showSenderName: conversation.type == .group
-                            )
-                            .id(message.id)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                if message.isFromCurrentUser(userId: currentUserId) {
-                                    Button(role: .destructive) {
-                                        Task {
-                                            await viewModel.deleteMessage(message, currentUserId: currentUserId)
-                                        }
-                                    } label: {
-                                        Label("delete", systemImage: "trash")
+                        .contextMenu {
+                            if message.status == .failed {
+                                Button {
+                                    Task {
+                                        await viewModel.retryMessage(message)
                                     }
+                                } label: {
+                                    Label("retry", systemImage: "arrow.clockwise")
                                 }
                             }
-                            .contextMenu {
-                                if message.status == .failed {
-                                    Button {
-                                        Task {
-                                            await viewModel.retryMessage(message)
-                                        }
-                                    } label: {
-                                        Label("retry", systemImage: "arrow.clockwise")
+                            
+                            if message.isFromCurrentUser(userId: currentUserId) {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await viewModel.deleteMessage(message, currentUserId: currentUserId)
                                     }
-                                }
-                                
-                                if message.isFromCurrentUser(userId: currentUserId) {
-                                    Button(role: .destructive) {
-                                        Task {
-                                            await viewModel.deleteMessage(message, currentUserId: currentUserId)
-                                        }
-                                    } label: {
-                                        Label("delete", systemImage: "trash")
-                                    }
+                                } label: {
+                                    Label("delete", systemImage: "trash")
                                 }
                             }
                         }
                     }
-                    .padding(.top, 8)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .onChange(of: viewModel.messages.count) { _, _ in
                     // Auto-scroll to bottom on new message
                     if let lastMessage = viewModel.messages.last {
