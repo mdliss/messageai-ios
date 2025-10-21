@@ -81,6 +81,42 @@ class NotificationService: NSObject {
         }
     }
     
+    // MARK: - Local Notifications
+    
+    /// Schedule local notification for new message
+    /// - Parameters:
+    ///   - title: Notification title (sender name)
+    ///   - body: Notification body (message text)
+    ///   - conversationId: Conversation ID
+    func scheduleLocalNotification(title: String, body: String, conversationId: String) async {
+        guard notificationPermissionGranted else {
+            print("⚠️ Notification permission not granted, skipping notification")
+            return
+        }
+        
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.badge = 1
+        content.userInfo = ["conversationId": conversationId]
+        
+        // Trigger immediately
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: trigger
+        )
+        
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+            print("✅ Local notification scheduled: \(title) - \(body)")
+        } catch {
+            print("❌ Failed to schedule notification: \(error.localizedDescription)")
+        }
+    }
+    
     // MARK: - Handle Notification Tap
     
     /// Set handler for notification tap

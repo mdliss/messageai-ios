@@ -175,6 +175,9 @@ struct ChatView: View {
             }
         }
         .onAppear {
+            // Set current conversation in app state
+            AppStateService.shared.setCurrentConversation(conversation.id)
+            
             viewModel.loadMessages(
                 conversationId: conversation.id,
                 currentUserId: currentUserId
@@ -182,6 +185,9 @@ struct ChatView: View {
             aiViewModel.subscribeToInsights(conversationId: conversation.id)
         }
         .onDisappear {
+            // Clear current conversation from app state
+            AppStateService.shared.clearCurrentConversation()
+            
             viewModel.cleanup()
             aiViewModel.cleanup()
         }
