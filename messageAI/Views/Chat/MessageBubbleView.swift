@@ -55,6 +55,11 @@ struct MessageBubbleView: View {
                 .padding(.horizontal, 4)
             }
             
+            // Spacer on right for received messages
+            if !isFromCurrentUser {
+                Spacer(minLength: 60)
+            }
+            
             // Padding on right for sent messages
             if isFromCurrentUser {
                 Spacer(minLength: 0)
