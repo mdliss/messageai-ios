@@ -102,6 +102,31 @@ class ConversationViewModel: ObservableObject {
         }
     }
     
+    /// Delete a conversation and all its messages
+    /// - Parameter conversation: Conversation to delete
+    func deleteConversation(_ conversation: Conversation) async {
+        // Remove from local array immediately (optimistic UI)
+        if let index = conversations.firstIndex(where: { $0.id == conversation.id }) {
+            conversations.remove(at: index)
+        }
+        
+        // Delete from Core Data
+        coreDataService.deleteConversation(conversationId: conversation.id)
+        
+        // Delete from Firestore (includes all messages)
+        do {
+            try await firestoreService.deleteConversation(conversationId: conversation.id)
+            print("✅ Conversation deleted successfully: \(conversation.id)")
+        } catch {
+            // Re-add conversation if deletion failed
+            conversations.append(conversation)
+            conversations.sort { $0.updatedAt > $1.updatedAt }
+            
+            errorMessage = "Failed to delete conversation: \(error.localizedDescription)"
+            print("❌ Failed to delete conversation: \(error.localizedDescription)")
+        }
+    }
+    
     /// Clean up subscriptions
     func cleanup() {
         conversationTask?.cancel()

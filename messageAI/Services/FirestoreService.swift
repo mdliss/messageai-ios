@@ -241,6 +241,43 @@ class FirestoreService {
         return conversation
     }
     
+    /// Delete conversation and all its messages
+    /// - Parameter conversationId: Conversation ID to delete
+    func deleteConversation(conversationId: String) async throws {
+        let conversationRef = db.collection("conversations").document(conversationId)
+        
+        // Delete all messages in the conversation first
+        let messagesRef = conversationRef.collection("messages")
+        let messagesSnapshot = try await messagesRef.getDocuments()
+        
+        // Batch delete messages (max 500 per batch)
+        var batch = db.batch()
+        var operationCount = 0
+        let messageCount = messagesSnapshot.documents.count
+        
+        for document in messagesSnapshot.documents {
+            batch.deleteDocument(document.reference)
+            operationCount += 1
+            
+            // Commit batch if we hit 500 operations and create new batch
+            if operationCount == 500 {
+                try await batch.commit()
+                batch = db.batch()
+                operationCount = 0
+            }
+        }
+        
+        // Commit remaining message deletions
+        if operationCount > 0 {
+            try await batch.commit()
+        }
+        
+        // Delete the conversation document
+        try await conversationRef.delete()
+        
+        print("✅ Deleted conversation and \(messageCount) messages: \(conversationId)")
+    }
+    
     // MARK: - Message Operations
     
     /// Subscribe to messages in a conversation (real-time)

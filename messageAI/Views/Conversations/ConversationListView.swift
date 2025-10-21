@@ -61,6 +61,24 @@ struct ConversationListView: View {
                                 )
                             }
                             .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await viewModel.deleteConversation(conversation)
+                                    }
+                                } label: {
+                                    Label("delete", systemImage: "trash")
+                                }
+                            }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await viewModel.deleteConversation(conversation)
+                                    }
+                                } label: {
+                                    Label("delete conversation", systemImage: "trash")
+                                }
+                            }
                         }
                     }
                     .listStyle(.plain)
