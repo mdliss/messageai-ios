@@ -1,10 +1,10 @@
 /**
- * Extract action items from conversation using Claude AI
+ * Extract action items from conversation using OpenAI GPT
  */
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 interface Message {
   id: string;
@@ -69,32 +69,31 @@ export const extractActionItems = functions.https.onCall(
         }
       }).join('\n');
       
-      // Call Claude API
-      const apiKey = functions.config().anthropic?.key;
+      // Call OpenAI API
+      const apiKey = functions.config().openai?.key;
       
       if (!apiKey) {
         throw new functions.https.HttpsError(
           'failed-precondition',
-          'Anthropic API key not configured'
+          'OpenAI API key not configured'
         );
       }
       
-      const anthropic = new Anthropic({
+      const openai = new OpenAI({
         apiKey: apiKey,
       });
       
-      const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
         max_tokens: 500,
+        temperature: 0.7,
         messages: [{
           role: 'user',
           content: `Extract action items from this team conversation. Format each as: "Owner: Task (deadline if mentioned)". Only include clear, actionable items. Never use hyphens.\n\nConversation:\n${transcript}`,
         }],
       });
       
-      const actionItems = response.content[0].type === 'text' 
-        ? response.content[0].text 
-        : '';
+      const actionItems = response.choices[0]?.message?.content || '';
       
       // Store insight
       const insightRef = admin.firestore()

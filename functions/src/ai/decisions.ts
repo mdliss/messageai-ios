@@ -1,10 +1,10 @@
 /**
- * Detect and log team decisions
+ * Detect and log team decisions using OpenAI GPT
  */
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 interface Message {
   id: string;
@@ -54,10 +54,10 @@ export const detectDecision = functions.firestore
     console.log(`📋 Decision detected in message: ${message.id}`);
     
     try {
-      const apiKey = functions.config().anthropic?.key;
+      const apiKey = functions.config().openai?.key;
       
       if (!apiKey) {
-        console.log('ℹ️ Anthropic API key not configured');
+        console.log('ℹ️ OpenAI API key not configured');
         return;
       }
       
@@ -78,23 +78,22 @@ export const detectDecision = functions.firestore
         `${msg.senderName}: ${msg.text}`
       ).join('\n');
       
-      // Call Claude to extract decision
-      const anthropic = new Anthropic({
+      // Call OpenAI to extract decision
+      const openai = new OpenAI({
         apiKey: apiKey,
       });
       
-      const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
         max_tokens: 200,
+        temperature: 0.7,
         messages: [{
           role: 'user',
           content: `Extract the decision from this conversation. Be concise and specific. Format: "Decision: [what was decided]". Never use hyphens.\n\nConversation:\n${transcript}`,
         }],
       });
       
-      const decision = response.content[0].type === 'text' 
-        ? response.content[0].text 
-        : '';
+      const decision = response.choices[0]?.message?.content || '';
       
       // Store insight
       const insightRef = admin.firestore()

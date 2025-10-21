@@ -1,10 +1,10 @@
 /**
- * Proactive assistant for detecting scheduling needs
+ * Proactive assistant for detecting scheduling needs using OpenAI GPT
  */
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 interface Message {
   id: string;
@@ -53,10 +53,10 @@ export const detectProactiveSuggestions = functions.firestore
     console.log(`📅 Scheduling language detected in message: ${message.id}`);
     
     try {
-      const apiKey = functions.config().anthropic?.key;
+      const apiKey = functions.config().openai?.key;
       
       if (!apiKey) {
-        console.log('ℹ️ Anthropic API key not configured');
+        console.log('ℹ️ OpenAI API key not configured');
         return;
       }
       
@@ -77,23 +77,22 @@ export const detectProactiveSuggestions = functions.firestore
         `${msg.senderName}: ${msg.text}`
       ).join('\n');
       
-      // Call Claude to assess scheduling need
-      const anthropic = new Anthropic({
+      // Call OpenAI to assess scheduling need
+      const openai = new OpenAI({
         apiKey: apiKey,
       });
       
-      const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
         max_tokens: 100,
+        temperature: 0.7,
         messages: [{
           role: 'user',
           content: `Does this conversation indicate a scheduling need? Answer with confidence level (0-100) and brief reason. Format: "Confidence: [number]\nReason: [brief explanation]"\n\nConversation:\n${transcript}`,
         }],
       });
       
-      const analysisText = response.content[0].type === 'text' 
-        ? response.content[0].text 
-        : '';
+      const analysisText = response.choices[0]?.message?.content || '';
       
       // Parse confidence
       const confidenceMatch = analysisText.match(/confidence:\s*(\d+)/i);

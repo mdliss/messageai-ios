@@ -1,10 +1,10 @@
 /**
- * Thread summarization using Claude AI
+ * Thread summarization using OpenAI GPT
  */
 
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 interface Message {
   id: string;
@@ -69,32 +69,31 @@ export const summarizeConversation = functions.https.onCall(
         }
       }).join('\n');
       
-      // Call Claude API
-      const apiKey = functions.config().anthropic?.key;
+      // Call OpenAI API
+      const apiKey = functions.config().openai?.key;
       
       if (!apiKey) {
         throw new functions.https.HttpsError(
           'failed-precondition',
-          'Anthropic API key not configured'
+          'OpenAI API key not configured'
         );
       }
       
-      const anthropic = new Anthropic({
+      const openai = new OpenAI({
         apiKey: apiKey,
       });
       
-      const response = await anthropic.messages.create({
-        model: 'claude-3-5-sonnet-20241022',
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
         max_tokens: 500,
+        temperature: 0.7,
         messages: [{
           role: 'user',
           content: `Summarize this team conversation in exactly 3 concise bullet points. Each bullet should be one sentence and capture key information, decisions, or action items. Never use hyphens - write "non profit" not "non-profit".\n\nConversation:\n${transcript}`,
         }],
       });
       
-      const summary = response.content[0].type === 'text' 
-        ? response.content[0].text 
-        : '';
+      const summary = response.choices[0]?.message?.content || '';
       
       // Store insight in Firestore
       const insightRef = admin.firestore()

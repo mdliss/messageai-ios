@@ -1,10 +1,9 @@
 /**
- * Detect priority/urgent messages
+ * Detect priority/urgent messages using OpenAI GPT
  */
 
 import * as functions from 'firebase-functions';
-import * as admin from 'firebase-admin';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
 interface Message {
   id: string;
@@ -63,29 +62,29 @@ export const detectPriority = functions.firestore
     
     if (hasAmbiguousKeyword) {
       try {
-        const apiKey = functions.config().anthropic?.key;
+        const apiKey = functions.config().openai?.key;
         
         if (!apiKey) {
-          console.log('ℹ️ Anthropic API key not configured, skipping AI priority detection');
+          console.log('ℹ️ OpenAI API key not configured, skipping AI priority detection');
           return;
         }
         
-        const anthropic = new Anthropic({
+        const openai = new OpenAI({
           apiKey: apiKey,
         });
         
-        const response = await anthropic.messages.create({
-          model: 'claude-3-5-sonnet-20241022',
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
           max_tokens: 50,
+          temperature: 0.3,
           messages: [{
             role: 'user',
             content: `Rate the urgency of this message on a scale of 1-5, where 5 is extremely urgent and 1 is casual. Only respond with a number.\n\nMessage: "${message.text}"`,
           }],
         });
         
-        const rating = response.content[0].type === 'text' 
-          ? parseInt(response.content[0].text.trim()) 
-          : 0;
+        const ratingText = response.choices[0]?.message?.content || '0';
+        const rating = parseInt(ratingText.trim());
         
         if (rating >= 4) {
           await snapshot.ref.update({
