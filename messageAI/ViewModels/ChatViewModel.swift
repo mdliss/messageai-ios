@@ -19,11 +19,16 @@ class ChatViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isSending = false
     @Published var isUploadingImage = false
+    @Published var typingUsers: [String] = []
+    @Published var typingUserNames: [String: String] = [:]
     
     private let firestoreService = FirestoreService.shared
     private let coreDataService = CoreDataService.shared
     private let storageService = StorageService.shared
+    private let realtimeDBService = RealtimeDBService.shared
     private var messageTask: Task<Void, Never>?
+    private var typingTask: Task<Void, Never>?
+    private var typingTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     
     private var conversationId: String?
@@ -66,6 +71,76 @@ class ChatViewModel: ObservableObject {
                 
                 // Mark messages as read
                 await self.markMessagesAsRead(fetchedMessages, currentUserId: currentUserId)
+            }
+        }
+        
+        // Subscribe to typing indicators
+        subscribeToTyping(conversationId: conversationId, currentUserId: currentUserId)
+    }
+    
+    // MARK: - Typing Indicators
+    
+    /// Subscribe to typing indicators
+    private func subscribeToTyping(conversationId: String, currentUserId: String) {
+        typingTask = Task {
+            for await typingUserIds in realtimeDBService.observeTyping(conversationId: conversationId) {
+                // Filter out current user
+                let otherUsersTyping = typingUserIds.filter { $0 != currentUserId }
+                self.typingUsers = otherUsersTyping
+                print("⌨️ Typing users: \(otherUsersTyping)")
+            }
+        }
+    }
+    
+    /// Update typing status
+    /// - Parameter isTyping: Whether user is typing
+    func updateTypingStatus(isTyping: Bool, currentUserId: String) {
+        guard let conversationId = conversationId else { return }
+        
+        Task {
+            await realtimeDBService.setTyping(
+                conversationId: conversationId,
+                userId: currentUserId,
+                isTyping: isTyping
+            )
+        }
+    }
+    
+    /// Handle text input change (debounced)
+    func handleTextChange(_ text: String, currentUserId: String) {
+        guard let conversationId = conversationId else { return }
+        
+        // Cancel previous timer
+        typingTimer?.invalidate()
+        
+        if !text.isEmpty {
+            // Set typing to true
+            Task {
+                await realtimeDBService.setTyping(
+                    conversationId: conversationId,
+                    userId: currentUserId,
+                    isTyping: true
+                )
+            }
+            
+            // Set timer to clear typing after 3 seconds of inactivity
+            typingTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+                Task {
+                    await self?.realtimeDBService.setTyping(
+                        conversationId: conversationId,
+                        userId: currentUserId,
+                        isTyping: false
+                    )
+                }
+            }
+        } else {
+            // Clear typing immediately if text is empty
+            Task {
+                await realtimeDBService.setTyping(
+                    conversationId: conversationId,
+                    userId: currentUserId,
+                    isTyping: false
+                )
             }
         }
     }
@@ -314,13 +389,30 @@ class ChatViewModel: ObservableObject {
     /// Clean up subscriptions
     func cleanup() {
         messageTask?.cancel()
+        typingTask?.cancel()
+        typingTimer?.invalidate()
+        
+        // Clear typing status
+        if let conversationId = conversationId, let currentUserId = currentUserId {
+            Task {
+                await realtimeDBService.setTyping(
+                    conversationId: conversationId,
+                    userId: currentUserId,
+                    isTyping: false
+                )
+            }
+        }
+        
         conversationId = nil
         currentUserId = nil
         messages = []
+        typingUsers = []
     }
     
     deinit {
         messageTask?.cancel()
+        typingTask?.cancel()
+        typingTimer?.invalidate()
     }
 }
 

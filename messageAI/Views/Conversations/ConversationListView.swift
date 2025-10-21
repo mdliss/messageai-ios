@@ -16,6 +16,8 @@ struct ConversationListView: View {
     @State private var showSearch = false
     @State private var selectedConversation: Conversation?
     
+    private let realtimeDBService = RealtimeDBService.shared
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -133,7 +135,13 @@ struct ConversationListView: View {
             }
             .onAppear {
                 if let userId = authViewModel.currentUser?.id {
+                    print("📱 ConversationListView appeared for user: \(userId)")
                     viewModel.loadConversations(userId: userId)
+                    
+                    // Ensure presence is set
+                    Task {
+                        await realtimeDBService.setUserOnline(userId: userId)
+                    }
                 }
             }
             .alert("error", isPresented: .constant(viewModel.errorMessage != nil)) {
@@ -170,4 +178,3 @@ struct ConversationListView: View {
     ConversationListView()
         .environmentObject(AuthViewModel())
 }
-

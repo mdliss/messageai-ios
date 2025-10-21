@@ -86,6 +86,14 @@ struct ChatView: View {
                 }
             }
             
+            // Typing indicator
+            if !viewModel.typingUsers.isEmpty {
+                TypingIndicatorView(
+                    typingUsers: viewModel.typingUsers,
+                    participantNames: conversation.participantDetails.mapValues { $0.displayName }
+                )
+            }
+            
             // Message input
             MessageInputView(
                 text: $messageText,
@@ -96,6 +104,9 @@ struct ChatView: View {
                 isSending: viewModel.isSending,
                 isUploadingImage: viewModel.isUploadingImage
             )
+            .onChange(of: messageText) { _, newValue in
+                viewModel.handleTextChange(newValue, currentUserId: currentUserId)
+            }
         }
         .navigationTitle(conversation.displayName(for: currentUserId))
         .navigationBarTitleDisplayMode(.inline)

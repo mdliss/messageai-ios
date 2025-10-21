@@ -15,6 +15,11 @@ struct MessageBubbleView: View {
     
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
+            // Spacer on left for sent messages
+            if isFromCurrentUser {
+                Spacer()
+            }
+            
             if !isFromCurrentUser {
                 // Avatar for received messages
                 avatarView
@@ -47,10 +52,6 @@ struct MessageBubbleView: View {
                     }
                 }
                 .padding(.horizontal, 12)
-            }
-            
-            if isFromCurrentUser {
-                Spacer()
             }
         }
         .padding(.horizontal)

@@ -36,8 +36,13 @@ class AuthViewModel: ObservableObject {
                 self?.currentUser = user
                 self?.isAuthenticated = user != nil
                 
-                if user != nil {
-                    print("✅ User authenticated: \(user?.email ?? "")")
+                if let user = user {
+                    print("✅ User authenticated: \(user.email)")
+                    
+                    // Set user online when auth state changes to authenticated
+                    Task {
+                        await self?.realtimeDBService.setUserOnline(userId: user.id)
+                    }
                 } else {
                     print("ℹ️ User not authenticated")
                 }
@@ -60,7 +65,13 @@ class AuthViewModel: ObservableObject {
             let user = try await authService.signUp(email: email, password: password, displayName: displayName)
             currentUser = user
             isAuthenticated = true
-            print("✅ Sign up successful")
+            
+            print("✅ Sign up successful - now setting presence...")
+            
+            // Set user online in Realtime DB
+            await realtimeDBService.setUserOnline(userId: user.id)
+            
+            print("✅ Sign up flow complete")
         } catch let error as AuthError {
             errorMessage = error.errorDescription
             print("❌ Sign up failed: \(error.errorDescription ?? "")")
@@ -87,10 +98,12 @@ class AuthViewModel: ObservableObject {
             currentUser = user
             isAuthenticated = true
             
+            print("✅ Sign in successful - now setting presence...")
+            
             // Set user online in Realtime DB
             await realtimeDBService.setUserOnline(userId: user.id)
             
-            print("✅ Sign in successful")
+            print("✅ Sign in flow complete")
         } catch {
             // Firebase error handling
             if error.localizedDescription.contains("invalid-credential") || 
@@ -119,7 +132,13 @@ class AuthViewModel: ObservableObject {
             let user = try await authService.signInWithGoogle()
             currentUser = user
             isAuthenticated = true
-            print("✅ Google sign in successful")
+            
+            print("✅ Google sign in successful - now setting presence...")
+            
+            // Set user online in Realtime DB
+            await realtimeDBService.setUserOnline(userId: user.id)
+            
+            print("✅ Google sign in flow complete")
         } catch let error as AuthError {
             errorMessage = error.errorDescription
             print("❌ Google sign in failed: \(error.errorDescription ?? "")")

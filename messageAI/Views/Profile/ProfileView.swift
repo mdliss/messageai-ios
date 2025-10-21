@@ -66,19 +66,27 @@ struct ProfileView: View {
                             .foregroundStyle(.purple)
                         Text("ai features")
                         Spacer()
-                        Toggle("", isOn: .constant(true))
-                            .disabled(true)
+                        Text("enabled")
+                            .foregroundStyle(.secondary)
                     }
                     
-                    HStack {
-                        Image(systemName: "bell.badge")
-                            .foregroundStyle(.orange)
-                        Text("notifications")
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
+                    Button {
+                        // Open iOS Settings app for this app
+                        if let appSettings = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(appSettings)
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "bell.badge")
+                                .foregroundStyle(.orange)
+                            Text("notifications")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
                     }
+                    .buttonStyle(.plain)
                 }
                 
                 // About section

@@ -30,15 +30,17 @@ class NotificationService: NSObject {
     func requestPermission() async {
         let center = UNUserNotificationCenter.current()
         
+        print("🔔 Requesting notification permission...")
+        
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
             notificationPermissionGranted = granted
             
             if granted {
-                print("✅ Notification permission granted")
+                print("✅ Notification permission GRANTED")
                 await registerForRemoteNotifications()
             } else {
-                print("⚠️ Notification permission denied")
+                print("⚠️ Notification permission DENIED by user")
             }
         } catch {
             print("❌ Failed to request notification permission: \(error.localizedDescription)")
@@ -60,13 +62,19 @@ class NotificationService: NSObject {
     
     /// Get FCM token and save to Firestore
     func getFCMToken() async {
+        print("🔑 Getting FCM token...")
+        
         do {
             let token = try await Messaging.messaging().token()
             print("✅ FCM token retrieved: \(token)")
             
             // Save to Firestore
             if let userId = authService.currentUserId {
+                print("📝 Saving FCM token to Firestore for user: \(userId)")
                 try await authService.updateFCMToken(userId: userId, token: token)
+                print("✅ FCM token saved to Firestore")
+            } else {
+                print("⚠️ No user ID - cannot save FCM token")
             }
         } catch {
             print("❌ Failed to get FCM token: \(error.localizedDescription)")
@@ -105,7 +113,10 @@ extension NotificationService: UNUserNotificationCenterDelegate {
     ) {
         let userInfo = notification.request.content.userInfo
         
-        print("📬 Received notification in foreground")
+        print("📬 Received notification in FOREGROUND")
+        print("   Title: \(notification.request.content.title)")
+        print("   Body: \(notification.request.content.body)")
+        print("   UserInfo: \(userInfo)")
         
         // Show banner, badge, and play sound
         completionHandler([.banner, .badge, .sound])

@@ -88,6 +88,8 @@ class RealtimeDBService {
     /// Set user online status
     /// - Parameter userId: User ID
     func setUserOnline(userId: String) async {
+        print("🟢 Setting user ONLINE in Realtime DB: \(userId)")
+        
         let presenceRef = database.child("presence").child(userId)
         
         let data: [String: Any] = [
@@ -96,7 +98,22 @@ class RealtimeDBService {
         ]
         
         do {
+            // First, cancel any previous onDisconnect
+            try await presenceRef.cancelDisconnectOperations()
+            
+            // Set online
             try await presenceRef.setValue(data)
+            print("✅ User set to ONLINE in Realtime DB: \(userId)")
+            print("   Path: presence/\(userId)")
+            print("   Data written: \(data)")
+            
+            // Verify the write
+            let snapshot = try await presenceRef.getData()
+            if let verifyData = snapshot.value as? [String: Any] {
+                print("✅ Verified data in Realtime DB: \(verifyData)")
+            } else {
+                print("⚠️ Could not verify data in Realtime DB")
+            }
             
             // Auto-set offline on disconnect
             let offlineData: [String: Any] = [
@@ -104,16 +121,20 @@ class RealtimeDBService {
                 "lastSeen": ServerValue.timestamp()
             ]
             try await presenceRef.onDisconnectSetValue(offlineData)
+            print("✅ onDisconnect handler set for user: \(userId)")
             
-            print("✅ User set online: \(userId)")
         } catch {
-            print("❌ Failed to set user online: \(error.localizedDescription)")
+            print("❌ Failed to set user online in Realtime DB: \(error.localizedDescription)")
+            print("   Database URL: \(database.url)")
+            print("   Error details: \(error)")
         }
     }
     
     /// Set user offline status
     /// - Parameter userId: User ID
     func setUserOffline(userId: String) async {
+        print("🔴 Setting user OFFLINE in Realtime DB: \(userId)")
+        
         let presenceRef = database.child("presence").child(userId)
         
         let data: [String: Any] = [
@@ -123,9 +144,9 @@ class RealtimeDBService {
         
         do {
             try await presenceRef.setValue(data)
-            print("✅ User set offline: \(userId)")
+            print("✅ User set to OFFLINE in Realtime DB: \(userId)")
         } catch {
-            print("❌ Failed to set user offline: \(error.localizedDescription)")
+            print("❌ Failed to set user offline in Realtime DB: \(error.localizedDescription)")
         }
     }
     

@@ -27,7 +27,16 @@ final class FirebaseConfig {
         self.auth = Auth.auth()
         self.db = Firestore.firestore()
         self.storage = Storage.storage()
-        self.realtimeDB = Database.database().reference()
+        
+        // Initialize Realtime Database with URL from GoogleService-Info.plist
+        if let databaseURL = FirebaseApp.app()?.options.databaseURL {
+            print("📍 Realtime Database URL: \(databaseURL)")
+            self.realtimeDB = Database.database(url: databaseURL).reference()
+        } else {
+            print("⚠️ No database URL found in GoogleService-Info.plist")
+            print("   Using default Realtime DB reference")
+            self.realtimeDB = Database.database().reference()
+        }
         
         // Configure Firestore for offline persistence
         let settings = FirestoreSettings()
@@ -37,5 +46,6 @@ final class FirebaseConfig {
         
         print("✅ Firebase initialized successfully")
         print("📱 Project ID: \(FirebaseApp.app()?.options.projectID ?? "unknown")")
+        print("🔥 Realtime DB URL: \(self.realtimeDB.url)")
     }
 }
