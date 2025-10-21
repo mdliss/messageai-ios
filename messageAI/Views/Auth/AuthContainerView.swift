@@ -10,8 +10,7 @@ import SwiftUI
 
 struct AuthContainerView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
-    @EnvironmentObject var appState: AppStateService
-
+    
     var body: some View {
         Group {
             if authViewModel.isAuthenticated {
@@ -27,9 +26,6 @@ struct AuthContainerView: View {
 
 /// Main tab view for authenticated users
 struct MainTabView: View {
-    // Global app state for tracking current conversation
-    @EnvironmentObject private var appState: AppStateService
-
     var body: some View {
         TabView {
             // Conversations tab

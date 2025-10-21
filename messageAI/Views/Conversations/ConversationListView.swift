@@ -15,9 +15,6 @@ struct ConversationListView: View {
     @State private var showGroupCreation = false
     @State private var showSearch = false
     @State private var selectedConversation: Conversation?
-
-    // Global app state for tracking current conversation
-    @EnvironmentObject private var appState: AppStateService
     
     private let realtimeDBService = RealtimeDBService.shared
     
@@ -134,20 +131,13 @@ struct ConversationListView: View {
                         conversation: conversation,
                         currentUserId: currentUserId
                     )
-                    .onAppear {
-                        // Track that this conversation is now open
-                        appState.setCurrentConversation(conversation.id)
-                    }
                 }
             }
             .onAppear {
                 if let userId = authViewModel.currentUser?.id {
                     print("📱 ConversationListView appeared for user: \(userId)")
                     viewModel.loadConversations(userId: userId)
-
-                    // Clear current conversation when returning to conversation list
-                    appState.clearCurrentConversation()
-
+                    
                     // Ensure presence is set
                     Task {
                         await realtimeDBService.setUserOnline(userId: userId)

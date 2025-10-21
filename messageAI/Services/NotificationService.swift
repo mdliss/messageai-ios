@@ -9,6 +9,7 @@
 import Foundation
 import UIKit
 import UserNotifications
+import FirebaseMessaging
 
 /// Service managing push notifications
 class NotificationService: NSObject {
@@ -37,7 +38,7 @@ class NotificationService: NSObject {
             
             if granted {
                 print("✅ Notification permission GRANTED")
-                setupNotificationCenter()
+                await registerForRemoteNotifications()
             } else {
                 print("⚠️ Notification permission DENIED by user")
             }
@@ -46,50 +47,37 @@ class NotificationService: NSObject {
         }
     }
     
-    /// Set up notification center delegate
-    private func setupNotificationCenter() {
+    /// Register for remote notifications
+    private func registerForRemoteNotifications() async {
+        await UIApplication.shared.registerForRemoteNotifications()
+        
         // Set delegate for foreground notifications
         UNUserNotificationCenter.current().delegate = self
+        
+        // Set Firebase Messaging delegate
+        Messaging.messaging().delegate = self
     }
     
-    // MARK: - Local Notifications
-
-    /// Trigger a local notification for a new message
-    /// - Parameters:
-    ///   - senderName: Name of the message sender
-    ///   - messageText: The message text
-    ///   - conversationId: ID of the conversation for deep linking
-    func triggerLocalNotification(senderName: String, messageText: String, conversationId: String) {
-        print("📬 Triggering local notification for message from \(senderName)")
-
-        // Create notification content
-        let content = UNMutableNotificationContent()
-        content.title = senderName
-        content.body = messageText
-        content.sound = .default
-        content.userInfo = ["conversationId": conversationId]
-
-        // Create trigger for immediate delivery
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-
-        // Create request with unique identifier based on message content
-        // Use conversationId + senderName + first few words of message to ensure uniqueness
-        let messagePreview = messageText.prefix(20).replacingOccurrences(of: " ", with: "_")
-        let uniqueId = "message-\(conversationId)-\(senderName)-\(messagePreview)"
-
-        let request = UNNotificationRequest(
-            identifier: uniqueId,
-            content: content,
-            trigger: trigger
-        )
-
-        // Add to notification center
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("❌ Failed to schedule local notification: \(error.localizedDescription)")
+    // MARK: - FCM Token
+    
+    /// Get FCM token and save to Firestore
+    func getFCMToken() async {
+        print("🔑 Getting FCM token...")
+        
+        do {
+            let token = try await Messaging.messaging().token()
+            print("✅ FCM token retrieved: \(token)")
+            
+            // Save to Firestore
+            if let userId = authService.currentUserId {
+                print("📝 Saving FCM token to Firestore for user: \(userId)")
+                try await authService.updateFCMToken(userId: userId, token: token)
+                print("✅ FCM token saved to Firestore")
             } else {
-                print("✅ Local notification scheduled successfully")
+                print("⚠️ No user ID - cannot save FCM token")
             }
+        } catch {
+            print("❌ Failed to get FCM token: \(error.localizedDescription)")
         }
     }
     
@@ -124,13 +112,12 @@ extension NotificationService: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let userInfo = notification.request.content.userInfo
-
-        print("📬 Presenting notification in FOREGROUND")
-        print("   ID: \(notification.request.identifier)")
+        
+        print("📬 Received notification in FOREGROUND")
         print("   Title: \(notification.request.content.title)")
         print("   Body: \(notification.request.content.body)")
         print("   UserInfo: \(userInfo)")
-
+        
         // Show banner, badge, and play sound
         completionHandler([.banner, .badge, .sound])
     }
@@ -153,4 +140,22 @@ extension NotificationService: UNUserNotificationCenterDelegate {
     }
 }
 
+// MARK: - MessagingDelegate
+
+extension NotificationService: MessagingDelegate {
+    
+    /// Handle FCM token refresh
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard let token = fcmToken else { return }
+        
+        print("✅ FCM token refreshed: \(token)")
+        
+        Task {
+            // Save to Firestore
+            if let userId = authService.currentUserId {
+                try? await authService.updateFCMToken(userId: userId, token: token)
+            }
+        }
+    }
+}
 

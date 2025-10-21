@@ -11,9 +11,6 @@ import SwiftUI
 import Combine
 import FirebaseFirestore
 
-// Import the app state service for tracking current conversation
-private let appStateService = AppStateService.shared
-
 /// ViewModel managing chat functionality
 @MainActor
 class ChatViewModel: ObservableObject {
@@ -29,7 +26,6 @@ class ChatViewModel: ObservableObject {
     private let coreDataService = CoreDataService.shared
     private let storageService = StorageService.shared
     private let realtimeDBService = RealtimeDBService.shared
-    private let notificationService = NotificationService.shared
     private var messageTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
     private var typingTimer: Timer?
@@ -59,59 +55,20 @@ class ChatViewModel: ObservableObject {
         
         // Subscribe to Firestore for real-time updates
         messageTask = Task {
-            var processedMessageIds = Set<String>()
-            var isConversationCurrentlyOpen = false
-
             for await fetchedMessages in firestoreService.subscribeToMessages(conversationId: conversationId) {
                 self.messages = fetchedMessages
                 self.isLoading = false
-
-                // Check if conversation state has changed
-                let wasConversationOpen = isConversationCurrentlyOpen
-                isConversationCurrentlyOpen = appStateService.isConversationOpen(conversationId)
-
-                // If conversation just became active, clear processed messages
-                if !wasConversationOpen && isConversationCurrentlyOpen {
-                    print("💬 Conversation became active - clearing processed message history")
-                    processedMessageIds.removeAll()
-                }
-
-                // Check for new messages from other users that haven't been processed
-                let newMessages = fetchedMessages.filter { message in
-                    // Only process messages that:
-                    // 1. Haven't been processed before (not in our set)
-                    // 2. Are not from current user
-                    // 3. Conversation is not currently open
-                    !processedMessageIds.contains(message.id) &&
-                    message.senderId != currentUserId &&
-                    !isConversationCurrentlyOpen
-                }
-
-                // Mark these messages as processed
-                for message in newMessages {
-                    processedMessageIds.insert(message.id)
-                }
-
-                // Trigger notifications for new messages
-                for message in newMessages {
-                    print("📬 Triggering local notification for NEW message from \(message.senderName): \(message.previewText)")
-                    notificationService.triggerLocalNotification(
-                        senderName: message.senderName,
-                        messageText: message.previewText,
-                        conversationId: conversationId
-                    )
-                }
-
+                
                 // Sync to Core Data in background
                 for message in fetchedMessages {
                     self.coreDataService.saveMessage(message)
                 }
-
+                
                 // Update conversation's last message
                 if let lastMessage = fetchedMessages.last {
                     self.updateConversationLastMessage(lastMessage)
                 }
-
+                
                 // Mark messages as read
                 await self.markMessagesAsRead(fetchedMessages, currentUserId: currentUserId)
             }

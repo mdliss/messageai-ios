@@ -17,6 +17,7 @@ struct User: Codable, Identifiable, Equatable {
     let photoURL: String?
     var isOnline: Bool
     var lastSeen: Date
+    var fcmToken: String?
     let createdAt: Date
     var preferences: UserPreferences
     
@@ -28,13 +29,14 @@ struct User: Codable, Identifiable, Equatable {
         self.photoURL = firebaseUser.photoURL?.absoluteString
         self.isOnline = true
         self.lastSeen = Date()
+        self.fcmToken = nil
         self.createdAt = Date()
         self.preferences = preferences
     }
     
     /// Initialize with all parameters
     init(id: String, email: String, displayName: String, photoURL: String? = nil,
-         isOnline: Bool = false, lastSeen: Date = Date(),
+         isOnline: Bool = false, lastSeen: Date = Date(), fcmToken: String? = nil,
          createdAt: Date = Date(), preferences: UserPreferences = UserPreferences()) {
         self.id = id
         self.email = email
@@ -42,6 +44,7 @@ struct User: Codable, Identifiable, Equatable {
         self.photoURL = photoURL
         self.isOnline = isOnline
         self.lastSeen = lastSeen
+        self.fcmToken = fcmToken
         self.createdAt = createdAt
         self.preferences = preferences
     }
@@ -70,6 +73,9 @@ struct User: Codable, Identifiable, Equatable {
         
         if let photoURL = photoURL {
             dict["photoURL"] = photoURL
+        }
+        if let fcmToken = fcmToken {
+            dict["fcmToken"] = fcmToken
         }
         
         return dict
@@ -104,6 +110,7 @@ extension User {
         case photoURL
         case isOnline
         case lastSeen
+        case fcmToken
         case createdAt
         case preferences
     }
