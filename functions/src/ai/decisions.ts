@@ -17,7 +17,12 @@ interface Message {
 /**
  * Detect decisions and create insight
  */
-export const detectDecision = functions.firestore
+export const detectDecision = functions
+  .runWith({
+    timeoutSeconds: 60,
+    memory: '512MB',
+  })
+  .firestore
   .document('conversations/{conversationId}/messages/{messageId}')
   .onCreate(async (snapshot, context) => {
     const message = snapshot.data() as Message;

@@ -17,7 +17,12 @@ interface Message {
 /**
  * Summarize conversation in 3 bullet points
  */
-export const summarizeConversation = functions.https.onCall(
+export const summarizeConversation = functions
+  .runWith({
+    timeoutSeconds: 60,
+    memory: '512MB',
+  })
+  .https.onCall(
   async (data, context) => {
     // Check authentication
     if (!context.auth) {

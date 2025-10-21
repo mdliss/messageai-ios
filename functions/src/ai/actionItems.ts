@@ -17,7 +17,12 @@ interface Message {
 /**
  * Extract action items with owners and deadlines
  */
-export const extractActionItems = functions.https.onCall(
+export const extractActionItems = functions
+  .runWith({
+    timeoutSeconds: 60,
+    memory: '512MB',
+  })
+  .https.onCall(
   async (data, context) => {
     // Check authentication
     if (!context.auth) {

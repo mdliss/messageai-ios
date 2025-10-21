@@ -10,7 +10,8 @@ import * as admin from 'firebase-admin';
 admin.initializeApp();
 
 // Export notification functions
-export { sendMessageNotification } from './notifications/sendMessage';
+// Temporarily commented out - using local notifications in Swift app instead
+// export { sendMessageNotification } from './notifications/sendMessage';
 
 // Export AI functions
 export { summarizeConversation } from './ai/summarize';

@@ -14,7 +14,12 @@ interface Message {
 /**
  * Detect if message is urgent and flag it
  */
-export const detectPriority = functions.firestore
+export const detectPriority = functions
+  .runWith({
+    timeoutSeconds: 60,
+    memory: '512MB',
+  })
+  .firestore
   .document('conversations/{conversationId}/messages/{messageId}')
   .onCreate(async (snapshot, context) => {
     const message = snapshot.data() as Message;

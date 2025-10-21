@@ -16,7 +16,12 @@ interface Message {
 /**
  * Detect scheduling needs and offer help
  */
-export const detectProactiveSuggestions = functions.firestore
+export const detectProactiveSuggestions = functions
+  .runWith({
+    timeoutSeconds: 60,
+    memory: '512MB',
+  })
+  .firestore
   .document('conversations/{conversationId}/messages/{messageId}')
   .onCreate(async (snapshot, context) => {
     const message = snapshot.data() as Message;
