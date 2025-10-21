@@ -10,7 +10,7 @@ import Foundation
 
 /// Message model representing a chat message
 struct Message: Codable, Identifiable, Equatable {
-    let id: String
+    var id: String
     let conversationId: String
     let senderId: String
     let senderName: String
@@ -26,7 +26,7 @@ struct Message: Codable, Identifiable, Equatable {
     var deliveredTo: [String]
     var readBy: [String]
     
-    let localId: String?
+    var localId: String?
     var isSynced: Bool
     var priority: Bool?
     

@@ -9,7 +9,7 @@
 import Foundation
 
 /// Conversation model representing a chat conversation
-struct Conversation: Codable, Identifiable, Equatable {
+struct Conversation: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let type: ConversationType
     let participantIds: [String]
@@ -117,7 +117,7 @@ enum ConversationType: String, Codable {
 }
 
 /// Participant detail in a conversation
-struct ParticipantDetail: Codable, Equatable {
+struct ParticipantDetail: Codable, Equatable, Hashable {
     let displayName: String
     let photoURL: String?
     
@@ -136,7 +136,7 @@ struct ParticipantDetail: Codable, Equatable {
 }
 
 /// Last message in a conversation
-struct LastMessage: Codable, Equatable {
+struct LastMessage: Codable, Equatable, Hashable {
     let text: String
     let senderId: String
     let timestamp: Date

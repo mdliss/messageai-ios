@@ -3,6 +3,7 @@ import Firebase
 import FirebaseAuth
 import FirebaseFirestore
 import FirebaseStorage
+import FirebaseDatabase
 
 class FirebaseConfig {
     static let shared = FirebaseConfig()
@@ -10,6 +11,7 @@ class FirebaseConfig {
     let auth: Auth
     let db: Firestore
     let storage: Storage
+    let realtimeDB: DatabaseReference
     
     private init() {
         // Configure Firebase
@@ -19,6 +21,7 @@ class FirebaseConfig {
         self.auth = Auth.auth()
         self.db = Firestore.firestore()
         self.storage = Storage.storage()
+        self.realtimeDB = Database.database().reference()
         
         // Configure Firestore for offline persistence
         let settings = FirestoreSettings()

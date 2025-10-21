@@ -57,30 +57,7 @@ struct MainTabView: View {
 
 // MARK: - Placeholder Views
 
-/// Temporary conversations view (will be replaced in PR #7)
-struct ConversationListView: View {
-    var body: some View {
-        NavigationStack {
-            VStack {
-                Image(systemName: "message.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.blue.opacity(0.3))
-                    .padding()
-                
-                Text("conversations")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text("your conversations will appear here")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding()
-            }
-            .navigationTitle("chats")
-        }
-    }
-}
+// ConversationListView moved to separate file
 
 /// Temporary decisions view (will be replaced in PR #19)
 struct DecisionsView: View {

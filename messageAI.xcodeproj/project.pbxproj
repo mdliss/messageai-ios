@@ -14,15 +14,29 @@
 		50F245CD2EA71CE600AB250C /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 50F245CC2EA71CE600AB250C /* FirebaseStorage */; };
 		50F246032EA72DB400AB250C /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 50F246022EA72DB400AB250C /* GoogleSignIn */; };
 		50F246052EA72DB400AB250C /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 50F246042EA72DB400AB250C /* GoogleSignInSwift */; };
+		50F2462E2EA7367600AB250C /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 50F2462D2EA7367600AB250C /* FirebaseDatabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		50F245AF2EA7138500AB250C /* messageAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = messageAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		50F246132EA7332E00AB250C /* Exceptions for "messageAI" folder in "messageAI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 50F245AE2EA7138500AB250C /* messageAI */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		50F245B12EA7138500AB250C /* messageAI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				50F246132EA7332E00AB250C /* Exceptions for "messageAI" folder in "messageAI" target */,
+			);
 			path = messageAI;
 			sourceTree = "<group>";
 		};
@@ -39,6 +53,7 @@
 				50F245C72EA71CE600AB250C /* FirebaseAuth in Frameworks */,
 				50F245CD2EA71CE600AB250C /* FirebaseStorage in Frameworks */,
 				50F245C92EA71CE600AB250C /* FirebaseFirestore in Frameworks */,
+				50F2462E2EA7367600AB250C /* FirebaseDatabase in Frameworks */,
 				50F246032EA72DB400AB250C /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -89,6 +104,7 @@
 				50F245CC2EA71CE600AB250C /* FirebaseStorage */,
 				50F246022EA72DB400AB250C /* GoogleSignIn */,
 				50F246042EA72DB400AB250C /* GoogleSignInSwift */,
+				50F2462D2EA7367600AB250C /* FirebaseDatabase */,
 			);
 			productName = messageAI;
 			productReference = 50F245AF2EA7138500AB250C /* messageAI.app */;
@@ -286,6 +302,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -317,6 +334,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -411,6 +429,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 50F246012EA72DB400AB250C /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		50F2462D2EA7367600AB250C /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 50F245C32EA71CE600AB250C /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
