@@ -9,6 +9,9 @@ struct messageAIApp: App {
     
     // Auth view model as state object
     @StateObject private var authViewModel = AuthViewModel()
+
+    // Global app state for tracking current conversation
+    @StateObject private var appState = AppStateService()
     
     // Track app lifecycle
     @Environment(\.scenePhase) private var scenePhase
@@ -17,10 +20,10 @@ struct messageAIApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(authViewModel)
+                .environmentObject(appState)
                 .task {
                     // Request notification permissions
                     await NotificationService.shared.requestPermission()
-                    await NotificationService.shared.getFCMToken()
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     handleScenePhaseChange(newPhase)

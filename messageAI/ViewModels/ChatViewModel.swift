@@ -11,6 +11,9 @@ import SwiftUI
 import Combine
 import FirebaseFirestore
 
+// Import the app state service for tracking current conversation
+private let appStateService = AppStateService.shared
+
 /// ViewModel managing chat functionality
 @MainActor
 class ChatViewModel: ObservableObject {
@@ -26,6 +29,7 @@ class ChatViewModel: ObservableObject {
     private let coreDataService = CoreDataService.shared
     private let storageService = StorageService.shared
     private let realtimeDBService = RealtimeDBService.shared
+    private let notificationService = NotificationService.shared
     private var messageTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
     private var typingTimer: Timer?
@@ -55,20 +59,40 @@ class ChatViewModel: ObservableObject {
         
         // Subscribe to Firestore for real-time updates
         messageTask = Task {
+            var previousMessageCount = 0
+
             for await fetchedMessages in firestoreService.subscribeToMessages(conversationId: conversationId) {
                 self.messages = fetchedMessages
                 self.isLoading = false
-                
+
+                // Check for new messages from other users
+                let newMessages = Array(fetchedMessages.dropFirst(previousMessageCount))
+                previousMessageCount = fetchedMessages.count
+
+                for message in newMessages {
+                    // Only trigger notification if:
+                    // 1. Message is not from current user
+                    // 2. Conversation is not currently open
+                    if message.senderId != currentUserId && !appStateService.isConversationOpen(conversationId) {
+                        print("📬 Triggering local notification for message from \(message.senderName)")
+                        notificationService.triggerLocalNotification(
+                            senderName: message.senderName,
+                            messageText: message.previewText,
+                            conversationId: conversationId
+                        )
+                    }
+                }
+
                 // Sync to Core Data in background
                 for message in fetchedMessages {
                     self.coreDataService.saveMessage(message)
                 }
-                
+
                 // Update conversation's last message
                 if let lastMessage = fetchedMessages.last {
                     self.updateConversationLastMessage(lastMessage)
                 }
-                
+
                 // Mark messages as read
                 await self.markMessagesAsRead(fetchedMessages, currentUserId: currentUserId)
             }

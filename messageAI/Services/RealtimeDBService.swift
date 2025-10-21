@@ -157,17 +157,33 @@ class RealtimeDBService {
         AsyncStream { continuation in
             let presenceRef = database.child("presence").child(userId)
             
+            print("👀 Observing presence for user: \(userId)")
+            
             let handle = presenceRef.observe(.value) { snapshot in
-                if let data = snapshot.value as? [String: Any],
-                   let online = data["online"] as? Bool {
+                if let data = snapshot.value as? [String: Any] {
+                    // Firebase stores boolean as number: true = 1, false = 0
+                    let online: Bool
+                    if let boolValue = data["online"] as? Bool {
+                        online = boolValue
+                    } else if let intValue = data["online"] as? Int {
+                        online = intValue == 1
+                    } else if let numberValue = data["online"] as? NSNumber {
+                        online = numberValue.boolValue
+                    } else {
+                        online = false
+                    }
+                    
+                    print("📍 Presence update for \(userId): \(online)")
                     continuation.yield(online)
                 } else {
+                    print("📍 No presence data for \(userId), assuming offline")
                     continuation.yield(false)
                 }
             }
             
             continuation.onTermination = { _ in
                 presenceRef.removeObserver(withHandle: handle)
+                print("🛑 Stopped observing presence for \(userId)")
             }
         }
     }
