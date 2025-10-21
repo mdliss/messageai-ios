@@ -26,6 +26,8 @@ class ChatViewModel: ObservableObject {
     private let coreDataService = CoreDataService.shared
     private let storageService = StorageService.shared
     private let realtimeDBService = RealtimeDBService.shared
+    private let syncService = SyncService.shared
+    private let networkMonitor = NetworkMonitor.shared
     private var messageTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
     private var typingTimer: Timer?
@@ -76,6 +78,28 @@ class ChatViewModel: ObservableObject {
         
         // Subscribe to typing indicators
         subscribeToTyping(conversationId: conversationId, currentUserId: currentUserId)
+        
+        // Listen for network reconnection to refresh messages
+        setupNetworkReconnectionListener()
+    }
+    
+    /// Set up listener for network reconnection to refresh messages
+    private func setupNetworkReconnectionListener() {
+        NotificationCenter.default.publisher(for: .networkConnected)
+            .sink { [weak self] _ in
+                guard let self = self, let conversationId = self.conversationId else { return }
+                
+                Task {
+                    print("🔄 Network reconnected, refreshing messages...")
+                    
+                    // Reload messages from Core Data to show updated sync status
+                    let updatedMessages = self.coreDataService.fetchMessages(conversationId: conversationId)
+                    await MainActor.run {
+                        self.messages = updatedMessages
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Typing Indicators
@@ -147,7 +171,7 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - Send Message
     
-    /// Send text message with optimistic UI
+    /// Send text message with optimistic UI and offline support
     /// - Parameters:
     ///   - text: Message text
     ///   - senderId: Sender ID
@@ -186,10 +210,18 @@ class ChatViewModel: ObservableObject {
         // Optimistic UI - add message immediately
         messages.append(message)
         
-        // Save to Core Data
+        // Save to Core Data immediately (offline support)
         coreDataService.saveMessage(message)
+        print("💾 Message saved to Core Data: \(localId)")
         
-        // Upload to Firestore
+        // Check if we're online
+        if !networkMonitor.isConnected {
+            print("📡 Offline: Message queued for sync when connected")
+            isSending = false
+            return
+        }
+        
+        // Try to upload to Firestore if online
         do {
             let serverId = try await firestoreService.sendMessage(message, to: conversationId)
             
@@ -207,14 +239,11 @@ class ChatViewModel: ObservableObject {
             
             print("✅ Message sent successfully: \(serverId)")
         } catch {
-            // Mark as failed
-            if let index = messages.firstIndex(where: { $0.localId == localId }) {
-                messages[index].status = .failed
-                coreDataService.updateMessageStatus(messageId: localId, status: .failed)
-            }
+            // Keep as "sending" status - will retry via SyncService
+            print("⚠️ Failed to send message, will retry via sync: \(error.localizedDescription)")
             
-            errorMessage = "Failed to send message: \(error.localizedDescription)"
-            print("❌ Failed to send message: \(error.localizedDescription)")
+            // Update sync service pending count
+            syncService.updatePendingCount()
         }
         
         isSending = false
@@ -222,7 +251,7 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - Send Image Message
     
-    /// Send image message with optimistic UI
+    /// Send image message with optimistic UI and offline support
     /// - Parameters:
     ///   - image: UIImage to send
     ///   - caption: Optional caption text
@@ -246,6 +275,14 @@ class ChatViewModel: ObservableObject {
         
         // Generate local ID
         let localId = UUID().uuidString
+        
+        // Check if we're offline - can't upload images offline
+        if !networkMonitor.isConnected {
+            errorMessage = "Cannot send images while offline. Please reconnect and try again"
+            print("📡 Offline: Cannot upload image")
+            isUploadingImage = false
+            return
+        }
         
         do {
             // Upload image to Storage
@@ -272,6 +309,7 @@ class ChatViewModel: ObservableObject {
             
             // Save to Core Data
             coreDataService.saveMessage(message)
+            print("💾 Image message saved to Core Data: \(localId)")
             
             // Upload to Firestore
             let serverId = try await firestoreService.sendMessage(message, to: conversationId)
@@ -288,14 +326,11 @@ class ChatViewModel: ObservableObject {
             
             print("✅ Image message sent successfully: \(serverId)")
         } catch {
-            // Mark as failed
-            if let index = messages.firstIndex(where: { $0.localId == localId }) {
-                messages[index].status = .failed
-                coreDataService.updateMessageStatus(messageId: localId, status: .failed)
-            }
+            // Keep as "sending" for retry
+            print("⚠️ Failed to send image message, will retry via sync: \(error.localizedDescription)")
             
-            errorMessage = "Failed to send image: \(error.localizedDescription)"
-            print("❌ Failed to send image: \(error.localizedDescription)")
+            // Update sync service pending count
+            syncService.updatePendingCount()
         }
         
         isUploadingImage = false

@@ -8,13 +8,15 @@
 
 import Foundation
 import Combine
+import SwiftUI
 
 /// Service managing offline message sync
-class SyncService {
+@MainActor
+class SyncService: ObservableObject {
     static let shared = SyncService()
     
-    var isSyncing = false
-    var pendingCount = 0
+    @Published var isSyncing = false
+    @Published var pendingCount = 0
     
     private let firestoreService = FirestoreService.shared
     private let coreDataService = CoreDataService.shared
@@ -55,18 +57,14 @@ class SyncService {
             return
         }
         
-        Task { @MainActor in
-            isSyncing = true
-        }
+        isSyncing = true
         
         let unsyncedMessages = coreDataService.fetchUnsyncedMessages()
         
         guard !unsyncedMessages.isEmpty else {
             print("ℹ️ No pending messages to sync")
-            Task { @MainActor in
-                isSyncing = false
-                pendingCount = 0
-            }
+            isSyncing = false
+            pendingCount = 0
             return
         }
         
@@ -97,10 +95,8 @@ class SyncService {
         
         print("✅ Sync complete: \(successCount) succeeded, \(failedCount) failed")
         
-        Task { @MainActor in
-            isSyncing = false
-            updatePendingCount()
-        }
+        isSyncing = false
+        updatePendingCount()
     }
     
     // MARK: - Upload with Retry
