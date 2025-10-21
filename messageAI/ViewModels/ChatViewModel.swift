@@ -21,6 +21,8 @@ class ChatViewModel: ObservableObject {
     @Published var isUploadingImage = false
     @Published var typingUsers: [String] = []
     @Published var typingUserNames: [String: String] = [:]
+    @Published var isLoadingOlderMessages = false
+    @Published var hasMoreMessages = true
     
     private let firestoreService = FirestoreService.shared
     private let coreDataService = CoreDataService.shared
@@ -55,11 +57,14 @@ class ChatViewModel: ObservableObject {
             isLoading = false
         }
         
-        // Subscribe to Firestore for real-time updates
+        // Subscribe to Firestore for real-time updates (only recent 50 messages)
         messageTask = Task {
-            for await fetchedMessages in firestoreService.subscribeToMessages(conversationId: conversationId) {
+            for await fetchedMessages in firestoreService.subscribeToMessages(conversationId: conversationId, limit: 50) {
                 self.messages = fetchedMessages
                 self.isLoading = false
+                
+                // Check if there might be more messages
+                self.hasMoreMessages = fetchedMessages.count >= 50
                 
                 // Sync to Core Data in background
                 for message in fetchedMessages {
@@ -81,6 +86,51 @@ class ChatViewModel: ObservableObject {
         
         // Listen for network reconnection to refresh messages
         setupNetworkReconnectionListener()
+    }
+    
+    // MARK: - Load Older Messages
+    
+    /// Load older messages for backfilling when scrolling up
+    func loadOlderMessages() async {
+        guard let conversationId = conversationId else { return }
+        guard !isLoadingOlderMessages else { return }
+        guard hasMoreMessages else { 
+            print("ℹ️ No more messages to load")
+            return 
+        }
+        
+        // Get the oldest message timestamp
+        guard let oldestMessage = messages.first else { return }
+        
+        isLoadingOlderMessages = true
+        print("📜 Loading older messages before \(oldestMessage.createdAt)...")
+        
+        do {
+            let olderMessages = try await firestoreService.fetchOlderMessages(
+                conversationId: conversationId,
+                beforeTimestamp: oldestMessage.createdAt,
+                limit: 50
+            )
+            
+            if olderMessages.isEmpty {
+                hasMoreMessages = false
+                print("ℹ️ No more older messages available")
+            } else {
+                // Prepend older messages to the beginning
+                messages.insert(contentsOf: olderMessages, at: 0)
+                
+                // Save to Core Data
+                for message in olderMessages {
+                    coreDataService.saveMessage(message)
+                }
+                
+                print("✅ Loaded \(olderMessages.count) older messages")
+            }
+        } catch {
+            print("❌ Failed to load older messages: \(error.localizedDescription)")
+        }
+        
+        isLoadingOlderMessages = false
     }
     
     /// Set up listener for network reconnection to refresh messages

@@ -29,6 +29,36 @@ struct ChatView: View {
             // Messages list
             ScrollViewReader { proxy in
                 List {
+                    // Load older messages indicator
+                    if viewModel.hasMoreMessages {
+                        HStack {
+                            Spacer()
+                            if viewModel.isLoadingOlderMessages {
+                                ProgressView()
+                                    .padding()
+                            } else {
+                                Button("load older messages") {
+                                    Task {
+                                        await viewModel.loadOlderMessages()
+                                    }
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding()
+                            }
+                            Spacer()
+                        }
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                        .onAppear {
+                            // Auto-load when scrolling to top
+                            Task {
+                                await viewModel.loadOlderMessages()
+                            }
+                        }
+                    }
+                    
                     if viewModel.isLoading && viewModel.messages.isEmpty {
                         ProgressView()
                             .listRowSeparator(.hidden)
@@ -167,6 +197,17 @@ struct ChatView: View {
                         }
                     } label: {
                         Label("action items", systemImage: "checklist")
+                    }
+                    
+                    Divider()
+                    
+                    Button {
+                        NetworkMonitor.shared.toggleDebugOfflineMode()
+                    } label: {
+                        Label(
+                            NetworkMonitor.shared.debugOfflineMode ? "go online (debug)" : "go offline (debug)",
+                            systemImage: NetworkMonitor.shared.debugOfflineMode ? "wifi" : "wifi.slash"
+                        )
                     }
                 } label: {
                     Image(systemName: "sparkles")

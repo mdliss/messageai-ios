@@ -17,6 +17,9 @@ class NetworkMonitor: ObservableObject {
     @Published var isConnected = true
     @Published var connectionType: NWInterface.InterfaceType?
     
+    // Debug mode for testing offline functionality
+    @Published var debugOfflineMode = false
+    
     private let monitor: NWPathMonitor
     private let queue = DispatchQueue(label: "NetworkMonitor")
     
@@ -25,10 +28,27 @@ class NetworkMonitor: ObservableObject {
         startMonitoring()
     }
     
+    /// Toggle debug offline mode for testing
+    func toggleDebugOfflineMode() {
+        debugOfflineMode.toggle()
+        isConnected = !debugOfflineMode
+        
+        if debugOfflineMode {
+            print("🐛 DEBUG: Offline mode enabled")
+            NotificationCenter.default.post(name: .networkDisconnected, object: nil)
+        } else {
+            print("🐛 DEBUG: Offline mode disabled")
+            NotificationCenter.default.post(name: .networkConnected, object: nil)
+        }
+    }
+    
     /// Start monitoring network connectivity
     private func startMonitoring() {
         monitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {
+                // Skip real network updates if in debug mode
+                guard self?.debugOfflineMode == false else { return }
+                
                 let wasConnected = self?.isConnected ?? true
                 self?.isConnected = path.status == .satisfied
                 self?.connectionType = path.availableInterfaces.first?.type

@@ -169,10 +169,11 @@ class CoreDataService {
     }
     
     /// Delete message from Core Data
-    /// - Parameter messageId: Message ID
+    /// - Parameter messageId: Message ID (can be server ID or local ID)
     func deleteMessage(messageId: String) {
         let fetchRequest = NSFetchRequest<MessageEntity>(entityName: "MessageEntity")
-        fetchRequest.predicate = NSPredicate(format: "id == %@", messageId)
+        // Try to match by id OR localId
+        fetchRequest.predicate = NSPredicate(format: "id == %@ OR localId == %@", messageId, messageId)
         fetchRequest.fetchLimit = 1
         
         do {
@@ -181,10 +182,52 @@ class CoreDataService {
             if let entity = results.first {
                 viewContext.delete(entity)
                 try viewContext.save()
-                print("✅ Deleted message: \(messageId)")
+                print("✅ Deleted message from Core Data: \(messageId)")
+            } else {
+                print("⚠️ Message not found in Core Data: \(messageId)")
             }
         } catch {
             print("❌ Failed to delete message: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Clean up old unsynced messages (for maintenance)
+    func cleanupOldUnsyncedMessages(olderThan days: Int = 7) {
+        let cutoffDate = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+        
+        let fetchRequest = NSFetchRequest<MessageEntity>(entityName: "MessageEntity")
+        fetchRequest.predicate = NSPredicate(format: "isSynced == NO AND createdAt < %@", cutoffDate as NSDate)
+        
+        do {
+            let oldMessages = try viewContext.fetch(fetchRequest)
+            
+            for entity in oldMessages {
+                viewContext.delete(entity)
+            }
+            
+            try viewContext.save()
+            print("✅ Cleaned up \(oldMessages.count) old unsynced messages")
+        } catch {
+            print("❌ Failed to cleanup old messages: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Clear ALL unsynced messages (for testing/debugging)
+    func clearAllUnsyncedMessages() {
+        let fetchRequest = NSFetchRequest<MessageEntity>(entityName: "MessageEntity")
+        fetchRequest.predicate = NSPredicate(format: "isSynced == NO")
+        
+        do {
+            let unsyncedMessages = try viewContext.fetch(fetchRequest)
+            
+            for entity in unsyncedMessages {
+                viewContext.delete(entity)
+            }
+            
+            try viewContext.save()
+            print("✅ Cleared ALL \(unsyncedMessages.count) unsynced messages from Core Data")
+        } catch {
+            print("❌ Failed to clear unsynced messages: \(error.localizedDescription)")
         }
     }
     

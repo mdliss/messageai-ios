@@ -53,6 +53,16 @@ struct MessageBubbleView: View {
                     }
                 }
                 .padding(.horizontal, 4)
+                
+                // Not Delivered indicator
+                if isFromCurrentUser && (message.status == .sending || message.status == .failed) && !message.isSynced {
+                    Text("Not Delivered")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 2)
+                }
             }
             
             // Spacer on right for received messages

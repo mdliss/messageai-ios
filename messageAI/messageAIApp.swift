@@ -21,6 +21,12 @@ struct messageAIApp: App {
                     // Request notification permissions
                     await NotificationService.shared.requestPermission()
                     await NotificationService.shared.getFCMToken()
+                    
+                    // Clear ALL unsynced messages from previous test sessions
+                    CoreDataService.shared.clearAllUnsyncedMessages()
+                    
+                    // Update sync service pending count
+                    SyncService.shared.updatePendingCount()
                 }
                 .onChange(of: scenePhase) { _, newPhase in
                     handleScenePhaseChange(newPhase)

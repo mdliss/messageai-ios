@@ -280,15 +280,18 @@ class FirestoreService {
     
     // MARK: - Message Operations
     
-    /// Subscribe to messages in a conversation (real-time)
-    /// - Parameter conversationId: Conversation ID
+    /// Subscribe to recent messages in a conversation (real-time, optimized)
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - limit: Number of recent messages to fetch (default 50)
     /// - Returns: AsyncStream of messages
-    func subscribeToMessages(conversationId: String) -> AsyncStream<[Message]> {
+    func subscribeToMessages(conversationId: String, limit: Int = 50) -> AsyncStream<[Message]> {
         AsyncStream { continuation in
             let messagesRef = db.collection("conversations")
                 .document(conversationId)
                 .collection("messages")
-                .order(by: "createdAt")
+                .order(by: "createdAt", descending: true)
+                .limit(to: limit)
             
             let listener = messagesRef.addSnapshotListener { snapshot, error in
                 if let error = error {
@@ -306,14 +309,44 @@ class FirestoreService {
                     try? document.data(as: Message.self)
                 }
                 
-                continuation.yield(messages)
-                print("✅ Fetched \(messages.count) messages for conversation \(conversationId)")
+                // Reverse to chronological order
+                let sortedMessages = messages.reversed()
+                
+                continuation.yield(Array(sortedMessages))
+                print("✅ Fetched \(sortedMessages.count) recent messages for conversation \(conversationId)")
             }
             
             continuation.onTermination = { _ in
                 listener.remove()
             }
         }
+    }
+    
+    /// Fetch older messages for backfilling
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - beforeTimestamp: Fetch messages before this timestamp
+    ///   - limit: Number of messages to fetch
+    /// - Returns: Array of older messages
+    func fetchOlderMessages(conversationId: String, beforeTimestamp: Date, limit: Int = 50) async throws -> [Message] {
+        let messagesRef = db.collection("conversations")
+            .document(conversationId)
+            .collection("messages")
+            .order(by: "createdAt", descending: true)
+            .whereField("createdAt", isLessThan: beforeTimestamp)
+            .limit(to: limit)
+        
+        let snapshot = try await messagesRef.getDocuments()
+        
+        let messages = snapshot.documents.compactMap { document -> Message? in
+            try? document.data(as: Message.self)
+        }
+        
+        // Reverse to chronological order
+        let sortedMessages = messages.reversed()
+        
+        print("✅ Fetched \(sortedMessages.count) older messages before \(beforeTimestamp)")
+        return Array(sortedMessages)
     }
     
     /// Send message to conversation
