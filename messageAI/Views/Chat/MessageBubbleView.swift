@@ -14,24 +14,25 @@ struct MessageBubbleView: View {
     let showSenderName: Bool
     
     var body: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .bottom, spacing: 6) {
             // Spacer on left for sent messages
             if isFromCurrentUser {
-                Spacer()
+                Spacer(minLength: 60)
             }
             
             if !isFromCurrentUser {
                 // Avatar for received messages
                 avatarView
+                    .padding(.leading, 8)
             }
             
-            VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 2) {
                 // Sender name (for group chats)
                 if showSenderName && !isFromCurrentUser {
                     Text(message.senderName)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .padding(.leading, 12)
+                        .padding(.leading, 4)
                 }
                 
                 // Message content
@@ -51,11 +52,18 @@ struct MessageBubbleView: View {
                         statusIndicator
                     }
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 4)
+            }
+            
+            // Padding on right for sent messages
+            if isFromCurrentUser {
+                Spacer(minLength: 0)
+                    .frame(width: 8)
+            } else {
+                Spacer()
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
     }
     
     // MARK: - Text Bubble
