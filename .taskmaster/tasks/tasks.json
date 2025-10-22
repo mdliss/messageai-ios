@@ -1,0 +1,212 @@
+{
+  "version": "1.0.0",
+  "tags": {
+    "master": {
+      "name": "master",
+      "description": "Main MessageAI implementation tasks",
+      "createdAt": "2025-01-22T00:00:00Z",
+      "tasks": [
+        {
+          "id": 1,
+          "title": "Fix Presence Sync Bug in New Chat Flow",
+          "description": "Resolve issue where all participants show as online in new chat initialization regardless of actual status",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Initialize presence states as unknown instead of online. Attach RTDB listeners BEFORE rendering participant list in UserPickerView. Implement proper debouncing for rapid view switches. Ensure cleanup on view dismissal to prevent listener leaks.",
+          "testStrategy": "Test with 2 simulators: User A online, User B offline. Start new chat and verify User B shows offline within 1 second. No flash of everyone being online.",
+          "subtasks": []
+        },
+        {
+          "id": 2,
+          "title": "Fix AI Summary Display Scoping",
+          "description": "Ensure summaries only appear on requesting user's device, not broadcast to all participants",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Change from storing summaries in shared Firestore conversations/{id}/insights to per-user ephemeral storage users/{uid}/ephemeral/summaries. Implement bottom sheet UI instead of inline message display. Ensure dismiss functionality works properly.",
+          "testStrategy": "User A requests summary on device 1. Verify summary popup appears only on device 1, positioned at bottom. User B on device 2 sees no summary or indication. Test dismiss and retry on failure.",
+          "subtasks": []
+        },
+        {
+          "id": 3,
+          "title": "Implement Action Items Extraction",
+          "description": "Build fully functional action items feature with AI extraction and CRUD operations",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Create Cloud Function aiExtractActions that returns structured JSON with {id, title, assignee, dueDate, sourceMsgIds, confidence}. Implement detection for phrases like 'I'll [action]', 'need to [action]', deadline keywords. Build client UI panel with CRUD operations, offline queue support, and links to source messages.",
+          "testStrategy": "Test with conversation containing explicit action items and deadlines. Verify 80%+ extraction accuracy. Test CRUD operations while offline, ensure sync on reconnect. Verify source message links work.",
+          "subtasks": []
+        },
+        {
+          "id": 4,
+          "title": "Implement AI-Powered Semantic Search",
+          "description": "Build smart search that finds relevant messages using natural language and semantic understanding",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Create Cloud Function aiSearch with embedding generation and cosine similarity ranking. Implement client search UI with natural language query support, filters (date, sender, type), and jump-to-message functionality. Optimize for <3 second response time.",
+          "testStrategy": "Search 'what did sarah say about deadline' without exact keyword match. Verify relevant results in <3 seconds. Test with 500+ message history. Verify empty state handling and result highlighting.",
+          "subtasks": []
+        },
+        {
+          "id": 5,
+          "title": "Implement Priority Message Detection",
+          "description": "Automatically flag urgent and high priority messages with AI detection",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Create Cloud Function aiDetectPriority that analyzes message content for urgency signals (ASAP, urgent, emergency, @mentions, deadlines). Return priority level and reason. Implement client UI badges (🔴 urgent, 🟡 high) and priority filter view. Optional push notifications for urgent messages.",
+          "testStrategy": "Send test messages with urgency keywords. Verify 85%+ correct flagging. Check false positive rate <10%. Test priority filter view shows correct subset. Verify UI badges render properly.",
+          "subtasks": []
+        },
+        {
+          "id": 6,
+          "title": "Implement Decision Tracking",
+          "description": "Automatically detect and log team decisions from conversations",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Create Cloud Function aiDetectDecisions that identifies consensus phrases ('we decided', 'agreed to', 'let's go with', poll results, 'approved'). Store in conversations/{id}/decisions/{decisionId}. Build Decisions tab timeline view with source message links and filters.",
+          "testStrategy": "Test with conversation containing explicit decisions and poll results. Verify 75%+ detection rate. Check decisions persist and sync across devices. Verify source message context links work properly.",
+          "subtasks": []
+        },
+        {
+          "id": 7,
+          "title": "Implement Polls - Inline with AI Triggers",
+          "description": "Move polls from separate tab to inline chat messages with AI-triggered suggestions",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "Implement AI detection for poll-worthy questions in group chats (≥3 participants). Show inline suggestion button. Create special poll message type that renders inline with live voting. Store in conversations/{id}/polls/{pollId}. Sync results to Decisions tab. Only trigger in group chats, not 1:1.",
+          "testStrategy": "Test in group chat with scheduling question. Verify AI suggests poll in 80%+ of cases. Tap to create poll, auto-fills question. Send poll, verify all participants can vote inline. Check live vote tallies update. Verify Decisions tab syncs.",
+          "subtasks": []
+        },
+        {
+          "id": 8,
+          "title": "Implement Proactive Scheduling Assistant - Settings",
+          "description": "Build user settings screen for time zone and work hours configuration",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [],
+          "details": "Create settings data model in users/{uid}/settings with fields: timeZone, workHours {start, end}, preferredMeetingDurations [30, 60], enableAIProposals. Build SwiftUI settings screen with timezone picker, work hours selector, and AI toggle. Implement save/load functionality.",
+          "testStrategy": "Navigate to settings. Set timezone to America/New_York, work hours 9 AM - 5 PM. Verify saves to Firestore. Reload app, verify settings persist. Test timezone picker shows all standard zones.",
+          "subtasks": []
+        },
+        {
+          "id": 9,
+          "title": "Implement Proactive Scheduling Assistant - Detection",
+          "description": "Build AI detection for scheduling intent in group conversations",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [8],
+          "details": "Monitor group chat messages for scheduling keywords: 'let's schedule', 'need to meet', 'when can we sync', date/time references like 'tomorrow', 'next week', 'Monday afternoon'. Support explicit command 'AI, find meeting times'. Trigger aiDetectScheduling Cloud Function.",
+          "testStrategy": "Send message 'let's schedule a meeting tomorrow' in group chat. Verify AI detection triggers within 1 second. Test various scheduling phrases. Verify 80%+ detection rate. Test explicit command works.",
+          "subtasks": []
+        },
+        {
+          "id": 10,
+          "title": "Implement Proactive Scheduling Assistant - Time Suggestions",
+          "description": "Generate meeting time suggestions based on participant availability and time zones",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [8, 9],
+          "details": "Create Cloud Function aiDetectScheduling that: 1) Parses all participant time zones from settings, 2) Finds overlapping work hours, 3) Proposes 3-5 optimal time slots with timezone-aware formatting. Display suggestions as inline card or message. Format: 'Tuesday 2-3 PM ET (11 AM-12 PM PT)'.",
+          "testStrategy": "Test with 3 participants in different time zones (ET, PT, GMT). Request meeting time. Verify suggestions respect all work hours. Check timezone conversion accuracy. Verify <5 second response time.",
+          "subtasks": []
+        },
+        {
+          "id": 11,
+          "title": "Implement Proactive Scheduling Assistant - One-Tap Poll",
+          "description": "Enable one-tap poll creation from AI-suggested meeting times",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [10, 7],
+          "details": "Add 'Create poll with these times' button to scheduling suggestions. Pre-populate poll with suggested time slots. Send poll as special message type to chat. Enable group voting on suggested times.",
+          "testStrategy": "Get scheduling suggestions, tap 'Create poll' button. Verify poll pre-fills with suggested times. Send poll, verify appears inline in chat. All participants can vote. Check results sync.",
+          "subtasks": []
+        },
+        {
+          "id": 12,
+          "title": "Triage Google Sign-In Crash",
+          "description": "Diagnose and fix or disable Google Sign-In feature",
+          "status": "pending",
+          "priority": "low",
+          "dependencies": [],
+          "details": "Check GoogleService-Info.plist for reversed client ID. Verify URL schemes match bundle ID in Xcode. Test on physical device (simulators can have OAuth issues). Check Firebase Auth configuration. If not fixable in 30 minutes, hide button and add 'Coming soon' note.",
+          "testStrategy": "Attempt Google Sign-In on simulator and physical device. Check logs for specific error. If working, verify full auth flow. If not fixable quickly, verify button is hidden cleanly.",
+          "subtasks": []
+        },
+        {
+          "id": 13,
+          "title": "Create Cloud Functions Utilities",
+          "description": "Build shared utility functions for AI features",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [],
+          "details": "Implement fetchConversationHistory with bounded retrieval and filters. Create chunker for splitting messages into LLM token limits. Build retryWithBackoff for resilient API calls. Implement rateLimiter (10 requests/user/min). Add telemetry logging with PII redaction.",
+          "testStrategy": "Test fetchConversationHistory with various limits and filters. Verify chunker splits at token boundaries. Test retryWithBackoff with simulated failures. Verify rate limiter blocks excessive requests. Check telemetry logs redact PII.",
+          "subtasks": []
+        },
+        {
+          "id": 14,
+          "title": "Implement Security & Rate Limiting",
+          "description": "Add security validation and rate limiting across all AI functions",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [13],
+          "details": "Validate user has conversation access before processing in all Cloud Functions. Implement rate limiting: 10 AI requests per user per minute. Add 30 second timeout to all functions. Log all inputs/outputs with PII redaction. Cache embeddings for search optimization.",
+          "testStrategy": "Attempt to access conversation without membership. Verify blocked. Spam AI requests, verify rate limiting at 11th request. Send long-running request, verify 30s timeout. Check logs for PII redaction.",
+          "subtasks": []
+        },
+        {
+          "id": 15,
+          "title": "Performance Testing & Optimization",
+          "description": "Verify all performance targets are met and optimize as needed",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [1, 2, 3, 4, 5, 6, 7, 10],
+          "details": "Test message delivery <200ms, offline sync <1s, AI responses within targets, app launch <2s, smooth 60 FPS scrolling through 1000+ messages. Optimize any failing metrics. Use iOS Simulator and Xcode Instruments for profiling.",
+          "testStrategy": "Run full performance test suite on simulators. Measure all metrics from rubric. Document results. Optimize bottlenecks. Retest until all targets met.",
+          "subtasks": []
+        },
+        {
+          "id": 16,
+          "title": "Create ARCHITECTURE.md Documentation",
+          "description": "Document system architecture with diagrams and data flows",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [],
+          "details": "Create comprehensive ARCHITECTURE.md covering: system overview (client ↔ Cloud Functions ↔ Firebase), data flow diagrams, presence lifecycle, offline-first architecture, AI integration (function calling, RAG pipeline), security model (Firestore rules, auth validation, secret management).",
+          "testStrategy": "Review document for completeness. Verify all major systems are documented. Check diagrams are clear. Ensure security model is well explained.",
+          "subtasks": []
+        },
+        {
+          "id": 17,
+          "title": "Create README.md with Setup Instructions",
+          "description": "Write comprehensive README with installation and setup guide",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [],
+          "details": "Create README.md with: project overview, features list, tech stack, installation steps, Firebase setup instructions, API key configuration, running the app, testing guide, known issues, contributing guidelines. Include screenshots and demo links.",
+          "testStrategy": "Follow README from scratch on fresh machine. Verify all steps work. Check links are valid. Ensure prerequisites are clearly stated.",
+          "subtasks": []
+        },
+        {
+          "id": 18,
+          "title": "Create TESTPLAN.md and Execute Full Test Suite",
+          "description": "Document and execute comprehensive test plan covering all rubric criteria",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [1, 2, 3, 4, 5, 6, 7, 10, 11, 14, 15],
+          "details": "Create TESTPLAN.md documenting: real-time messaging tests (delivery latency, offline queue), group chat tests (3+ users, typing, presence), AI feature tests (all 5 required features), lifecycle tests (background/foreground), performance benchmarks. Execute all tests and document results.",
+          "testStrategy": "Execute each test scenario in TESTPLAN.md on 2-3 simulators. Document pass/fail for each. Verify rubric score projection. Fix any failures. Retest until all pass. Final score target: 90-100 points.",
+          "subtasks": []
+        }
+      ]
+    }
+  },
+  "activeTag": "master"
+}
+

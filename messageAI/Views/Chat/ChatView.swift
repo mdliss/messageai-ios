@@ -155,6 +155,25 @@ struct ChatView: View {
             
             // Floating AI Insights Overlay (bottom)
             VStack(spacing: 8) {
+                // Show per-user summary (if exists) - ONLY visible to requester
+                if let summary = aiViewModel.currentUserSummary {
+                    AIInsightCardView(
+                        insight: summary,
+                        onDismiss: {
+                            Task {
+                                await aiViewModel.dismissInsight(
+                                    insightId: summary.id,
+                                    conversationId: conversation.id,
+                                    currentUserId: currentUserId
+                                )
+                            }
+                        },
+                        onAcceptSuggestion: nil
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                
+                // Show shared insights (excluding summaries)
                 ForEach(aiViewModel.insights) { insight in
                     let isSchedulingSuggestion = insight.type == .suggestion
                     
@@ -164,7 +183,8 @@ struct ChatView: View {
                             Task {
                                 await aiViewModel.dismissInsight(
                                     insightId: insight.id,
-                                    conversationId: conversation.id
+                                    conversationId: conversation.id,
+                                    currentUserId: currentUserId
                                 )
                             }
                         },
@@ -176,7 +196,7 @@ struct ChatView: View {
                 }
             }
             .padding(.bottom, 60)
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: aiViewModel.insights.count)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: aiViewModel.insights.count + (aiViewModel.currentUserSummary != nil ? 1 : 0))
         }
         .navigationTitle(conversation.displayName(for: currentUserId))
         .navigationBarTitleDisplayMode(.inline)
@@ -198,7 +218,11 @@ struct ChatView: View {
                 Menu {
                     Button {
                         Task {
-                            try? await aiViewModel.summarize(conversationId: conversation.id)
+                            // FIXED: Pass currentUserId for per-user summary storage
+                            try? await aiViewModel.summarize(
+                                conversationId: conversation.id,
+                                currentUserId: currentUserId
+                            )
                         }
                     } label: {
                         Label("summarize", systemImage: "doc.text")

@@ -112,15 +112,12 @@ ${transcript}`,
       
       const summary = response.choices[0]?.message?.content || '';
       
-      // Store insight in Firestore
-      const insightRef = admin.firestore()
-        .collection('conversations')
-        .doc(conversationId)
-        .collection('insights')
-        .doc();
+      // CRITICAL FIX: Do NOT store summary in shared insights collection
+      // Client now stores summaries in per-user ephemeral storage
+      // Return the insight data without saving to shared collection
       
       const insight = {
-        id: insightRef.id,
+        id: '', // Client will assign ID when storing per-user
         conversationId: conversationId,
         type: 'summary',
         content: summary,
@@ -130,13 +127,12 @@ ${transcript}`,
         },
         messageIds: messages.map(m => m.id),
         triggeredBy: context.auth.uid,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: new Date().toISOString(),
         dismissed: false,
       };
       
-      await insightRef.set(insight);
-      
-      console.log(`✅ Summary created for conversation ${conversationId}`);
+      console.log(`✅ Summary generated for conversation ${conversationId} (not stored in shared collection)`);
+      console.log(`   Client will store in: users/${context.auth.uid}/ephemeral/summaries/${conversationId}/`);
       
       return {
         success: true,

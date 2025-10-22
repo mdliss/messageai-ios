@@ -1,0 +1,268 @@
+# MessageAI - Product Requirements Document
+## Remote Team Professional Persona
+
+### Executive Summary
+MessageAI is a production-ready iOS messaging app built for remote team professionals who need to cut through communication noise. The app uses AI to surface critical information (decisions, action items, priorities) while maintaining <200ms real-time messaging performance with full offline support.
+
+### Target: Rubric Score 90-100 points (Grade A)
+
+## Critical Defects to Fix
+
+### 1. Presence Sync Bug in New Chat Flow
+**Current Behavior**: When starting a new chat, all participants show as "online" regardless of actual status. In-chat view shows correct presence.
+
+**Root Cause**: Presence listeners attach AFTER initial UI render, causing default "online" state flash.
+
+**Fix Requirements**:
+- Initialize all presence states as "unknown" (never default to "online")
+- Attach RTDB `/status/{uid}` listeners BEFORE rendering participant list
+- Debounce rapid view switches to prevent listener thrashing
+- Proper cleanup on view dismissal
+
+**Acceptance**: New chat shows accurate presence within 1 second, no "everyone online" flash
+
+### 2. AI Summary Display Scoping
+**Current Broken Behavior**: 
+- Summary appears on ALL users' screens when one user requests it
+- Sometimes renders at top of message list causing scroll/layout bugs
+
+**Required Behavior**:
+- Display as bottom sheet/popup at screen bottom
+- Show ONLY on requesting user's device (local state, never broadcast)
+- Use ephemeral storage: `users/{uid}/ephemeral/summaries` or local state
+- Never persist to shared conversation data
+
+**Acceptance**: User A requests → only A sees summary popup at bottom. User B never sees it.
+
+### 3. Action Items Feature (currently broken)
+**Status**: Function exists but non-functional
+
+**Implementation**:
+- Cloud Function: `aiExtractActions(conversationId, messageWindow)` 
+- Returns JSON with action items: {id, title, assignee, dueDate, sourceMsgIds, confidence}
+- Detection patterns: "I'll [action]", "need to [action]", "[person] should [action]", deadline phrases
+- Client UI: CRUD operations, offline queue, link to source messages
+
+**Acceptance**: 80%+ extraction accuracy, full CRUD offline/online, source message links
+
+### 4. Polls - AI-Triggered Inline Implementation
+**Current Flawed**: Polls in separate "Decisions" tab with popup
+
+**Required Behavior**:
+- AI detects poll-worthy content in group chats (≥3 participants): scheduling, decisions, planning questions
+- Inline suggestion: "📊 Create a poll for this question?"
+- User taps → compose poll (auto-filled from context) → sent as special message type
+- Live voting inline, results sync to Decisions tab
+- Data: `conversations/{id}/polls/{pollId}` with question, options, votes, timestamps
+
+**Acceptance**: 80%+ detection rate, inline rendering, only in groups (3+ participants)
+
+### 5. Google Sign-In Crash
+**Triage**: Check GoogleService-Info.plist, URL schemes, test on physical device
+
+**Action**: Fix within 30 min OR hide feature with "Coming soon" note. Not required by rubric.
+
+## Missing AI Features (Required by Rubric)
+
+### Feature 1: Thread Summarization ✅
+**Status**: WORKING CORRECTLY
+**Keep as-is**, just fix display scoping per Defect #2
+
+### Feature 2: Action Item Extraction ❌
+**Status**: BROKEN - see Defect #3 for implementation
+
+### Feature 3: Smart Search (AI-Powered Semantic Search) ❌
+**Implementation**:
+- Cloud Function: `aiSearch(conversationId, query, filters)`
+- Server-side: fetch candidates → generate embeddings → cosine similarity ranking → return top N with snippets
+- Client UI: search bar in chat, natural language queries, date/sender/type filters, "Jump to message" buttons
+- Performance: <3 seconds response time
+
+**Acceptance**: Finds relevant messages without exact keyword matches, <3s response, clear empty states
+
+### Feature 4: Priority Message Detection ❌
+**Implementation**:
+- Cloud Function: `aiDetectPriority(conversationId, newMessage)` 
+- Returns: {priority: "urgent"|"high"|"normal", reason: string}
+- Signals: "ASAP", "urgent", "emergency", @mentions, deadlines, questions
+- Run on message send or batch hourly
+- Client UI: badges (🔴 urgent, 🟡 high), priority filter view, optional urgent push notifications
+
+**Acceptance**: 85%+ accuracy, <10% false positives, clear UI distinction
+
+### Feature 5: Decision Tracking ❌
+**Implementation**:
+- Cloud Function: `aiDetectDecisions(conversationId, messageWindow)`
+- Returns: {decisions: [{id, text, sourceMsgIds, timestamp}]}
+- Patterns: "we decided", "agreed to", "let's go with", poll results, "approved", "greenlit"
+- Store: `conversations/{id}/decisions/{decisionId}`
+- Client UI: Decisions tab timeline, link to source messages, filters
+
+**Acceptance**: 75%+ detection rate, clear context display, persists and syncs
+
+## Advanced AI Feature: Proactive Assistant
+
+### Time Zone Settings
+- User settings screen: `users/{uid}/settings`
+- Fields: timeZone, workHours {start, end}, preferredMeetingDurations, enableAIProposals
+
+### Scheduling Detection
+- Monitor group chats for: "let's schedule", "need to meet", "when can we sync"
+- Date/time references: "tomorrow", "next week", "Monday afternoon"
+- Explicit command: "AI, find meeting times"
+
+### Meeting Time Suggestions
+Algorithm:
+1. Parse participant time zones from settings
+2. Find overlapping work hours across all participants
+3. Check conflicts (calendar integration optional for MVP)
+4. Propose 3-5 optimal slots with timezone-aware formatting
+5. Display inline or as dedicated card
+
+Format: "Tuesday 2-3 PM ET (11 AM-12 PM PT)\nWednesday 10-11 AM ET (7-8 AM PT)"
+
+### One-Tap Poll Creation
+- "Tap to create poll with these times" button
+- Pre-populates poll with suggested slots
+- Sends to chat for group voting
+
+**Acceptance**: 80%+ detection, respects time zones/work hours, <5s response, one-tap poll works
+
+## Cloud Functions Catalog
+
+### Core AI Functions
+1. `aiSummarize(conversationId, messageRange)` → {summary: markdown}
+2. `aiExtractActions(conversationId, messageRange)` → {items: [...]}
+3. `aiSearch(conversationId, query, filters)` → {results: [...]}
+4. `aiDetectPriority(conversationId, message)` → {priority: level, reason: string}
+5. `aiDetectDecisions(conversationId, messageRange)` → {decisions: [...]}
+6. `aiDetectScheduling(conversationId, messages)` → {suggestions: [...]}
+
+### Shared Utilities
+- `fetchConversationHistory(conversationId, limit, filters)` - bounded retrieval
+- `chunker(messages, maxTokens)` - split into LLM-sized windows
+- `retryWithBackoff(fn, maxRetries)` - resilient API calls
+- `rateLimiter(userId, endpoint, window)` - prevent abuse (10 AI requests/user/min)
+- `telemetry(event, metadata)` - log timings and errors
+
+### Security
+- Validate user has conversation access before processing
+- Cache embeddings for search (vector store or Firestore)
+- Timeout: 30 seconds max per function
+- Log all inputs/outputs (redact PII)
+
+## Data Model
+
+### Firestore Collections
+```
+conversations/{id}/
+  - messages/{msgId}
+  - polls/{pollId}
+  - decisions/{decisionId}
+  - ai/
+    - actionItems/{itemId}
+
+users/{uid}/
+  - settings
+  - ephemeral/
+    - summaries/{summaryId}
+```
+
+### Realtime Database (Presence)
+```
+status/{uid}/
+  - online: boolean
+  - lastSeen: timestamp
+```
+
+## Performance Targets
+
+| Metric | Target | Test Method |
+|--------|--------|-------------|
+| Message delivery (good network) | <200ms | 2 simulators, 20 rapid-fire messages |
+| Offline sync after reconnect | <1s | Airplane mode 30s → reconnect |
+| AI Summarize response | <3s | 50-message conversation |
+| AI Action extraction | <5s | 100-message conversation |
+| AI Search response | <3s | 500-message history |
+| Priority detection | <2s | Real-time on message send |
+| Proactive scheduling | <5s | Triggered on keywords |
+| App launch to chat | <2s | Cold start, warm start |
+| Scroll 1000+ messages | 60 FPS | Long conversation, rapid scroll |
+
+## Rubric Alignment
+
+### Section 1: Core Messaging (35 points)
+- Real-time delivery <200ms ✅
+- Offline queuing + sync <1s ✅
+- Group chat (3+ users) smooth ✅
+
+### Section 2: Mobile Quality (20 points)
+- Lifecycle handling (background/foreground) ✅
+- Optimistic UI, smooth scrolling, <2s launch ✅
+
+### Section 3: AI Features (30 points)
+- All 5 required features working excellently (14-15 pts)
+- Persona fit with pain point solutions (5 pts)
+- Proactive Assistant fully functional (9-10 pts)
+
+### Section 4: Technical (10 points)
+- Clean architecture, secured keys, RAG pipeline (5 pts)
+- Robust auth, local DB, data sync (5 pts)
+
+### Section 5: Documentation (5 points)
+- Comprehensive README, architecture docs (3 pts)
+- App deployed to simulator/TestFlight (2 pts)
+
+**Target**: 90-100 points (A grade)
+
+## Security & Privacy
+
+### API Keys
+- All AI API keys in Cloud Functions environment variables
+- Never commit keys or bundle in iOS app
+- Use Firebase Admin SDK server-side
+
+### Data Access
+- Firestore rules enforce conversation-level access
+- Cloud Functions validate user authorization
+- Redact PII from logs
+
+### Privacy
+- Ephemeral AI results stored per-user (not shared)
+- Rate limit: 10 AI requests per user per minute
+- Opt-out mechanism in settings
+- Privacy policy link in app
+
+## Success Criteria
+
+### Code & Features
+- All 9 implementation batches completed
+- Zero critical bugs in test scenarios
+- All 5 AI features at "Excellent" rubric tier
+- Proactive Assistant detecting + suggesting times
+- Presence bug fixed
+- AI summary scoped per-user
+- Polls inline in group chats
+
+### Testing
+- All rubric scenarios passed on simulator
+- Performance targets met
+- No exposed secrets
+- Builds successfully
+- Tested on iOS 16+ simulators
+
+### Documentation
+- ARCHITECTURE.md with diagrams
+- README with setup instructions
+- TASKS.md with completion status
+- TESTPLAN.md with results
+- CHANGELOG.md with changes
+
+### Rubric Projection
+- Core Messaging: 33-35 pts (Excellent)
+- Mobile Quality: 18-20 pts (Excellent)
+- AI Features: 28-30 pts (Excellent)
+- Technical: 9-10 pts (Excellent)
+- Documentation: 5 pts (Excellent)
+- **Total: 93-100 points (A grade)**
+

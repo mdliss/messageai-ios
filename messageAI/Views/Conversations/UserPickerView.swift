@@ -17,7 +17,8 @@ struct UserPickerView: View {
     @State private var isLoading = false
     @State private var searchText = ""
     @State private var errorMessage: String?
-    @State private var onlineStatuses: [String: Bool] = [:]
+    @State private var onlineStatuses: [String: Bool?] = [:]  // Use Bool? to distinguish unknown from offline
+    @State private var presenceTasks: [String: Task<Void, Never>] = [:]  // Track tasks for cleanup
     
     private let firestoreService = FirestoreService.shared
     private let realtimeDBService = RealtimeDBService.shared
@@ -83,7 +84,8 @@ struct UserPickerView: View {
                                 Spacer()
                                 
                                 // Online indicator (from real-time presence)
-                                if onlineStatuses[user.id] == true {
+                                // Only show green dot if explicitly online (true), not nil/unknown or false
+                                if let isOnline = onlineStatuses[user.id], isOnline == true {
                                     Circle()
                                         .fill(Color.green)
                                         .frame(width: 10, height: 10)
@@ -107,6 +109,10 @@ struct UserPickerView: View {
             .searchable(text: $searchText, prompt: "search users")
             .onAppear {
                 loadUsers()
+            }
+            .onDisappear {
+                // CRITICAL: Clean up presence listeners to prevent memory leaks
+                cleanupPresenceListeners()
             }
             .onChange(of: users) { _, newUsers in
                 // Start observing presence for all users
@@ -161,8 +167,17 @@ struct UserPickerView: View {
     private func observePresenceForUsers(_ users: [User]) {
         print("👀 Starting presence observation for \(users.count) users")
         
+        // CRITICAL FIX: Initialize ALL presence states as nil (unknown) first
+        // This prevents the UI from showing "everyone is online" flash
         for user in users {
-            Task {
+            onlineStatuses[user.id] = nil
+        }
+        print("✅ Initialized all presence states as unknown")
+        
+        // Now attach RTDB listeners - updates will come through async
+        // Store tasks for proper cleanup on view dismissal
+        for user in users {
+            let task = Task {
                 for await isOnline in realtimeDBService.observePresence(userId: user.id) {
                     await MainActor.run {
                         onlineStatuses[user.id] = isOnline
@@ -170,7 +185,18 @@ struct UserPickerView: View {
                     }
                 }
             }
+            presenceTasks[user.id] = task
         }
+    }
+    
+    /// Clean up presence listeners when view is dismissed
+    private func cleanupPresenceListeners() {
+        print("🧹 Cleaning up \(presenceTasks.count) presence listeners")
+        for (_, task) in presenceTasks {
+            task.cancel()
+        }
+        presenceTasks.removeAll()
+        onlineStatuses.removeAll()
     }
 }
 
