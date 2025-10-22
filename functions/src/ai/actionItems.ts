@@ -93,8 +93,24 @@ export const extractActionItems = functions
         max_tokens: 500,
         temperature: 0.7,
         messages: [{
+          role: 'system',
+          content: 'You are an intelligent assistant helping remote teams never lose track of tasks mentioned in conversations. Extract clear, actionable items with owners and deadlines. Never use hyphens. Be specific and helpful.',
+        }, {
           role: 'user',
-          content: `Extract action items from this team conversation. Format each as: "Owner: Task (deadline if mentioned)". Only include clear, actionable items. Never use hyphens.\n\nConversation:\n${transcript}`,
+          content: `Extract action items from this remote team conversation. For each clear, actionable item:
+
+Format: "• Owner: Task description (deadline if mentioned)"
+
+Focus on:
+- Commitments people made
+- Tasks explicitly assigned
+- Deadlines mentioned
+- Follow ups needed
+
+Only include items that are clear and actionable. If no action items exist, say so clearly. Never use hyphens.
+
+Conversation:
+${transcript}`,
         }],
       });
       

@@ -88,12 +88,29 @@ export const detectProactiveSuggestions = functions
       });
       
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        max_tokens: 100,
+        model: 'gpt-4o',
+        max_tokens: 500,
         temperature: 0.7,
         messages: [{
+          role: 'system',
+          content: 'You are a proactive scheduling assistant for remote teams. Analyze conversations to detect scheduling needs and suggest concrete meeting times. Never use hyphens. Be concise and actionable.',
+        }, {
           role: 'user',
-          content: `Does this conversation indicate a scheduling need? Answer with confidence level (0-100) and brief reason. Format: "Confidence: [number]\nReason: [brief explanation]"\n\nConversation:\n${transcript}`,
+          content: `Analyze this conversation for scheduling needs. If there is a clear need to coordinate schedules or set up a meeting:
+
+1. Rate confidence (0-100) that they need scheduling help
+2. Suggest 2-3 specific time options based on typical working hours across time zones
+3. Format as:
+
+Confidence: [number]
+Suggestion: [helpful message about coordinating schedules]
+Times:
+- Option 1: [specific time suggestion, e.g., "Tomorrow 2pm EST / 11am PST"]
+- Option 2: [alternative time]
+- Option 3: [alternative time]
+
+Conversation:
+${transcript}`,
         }],
       });
       
@@ -103,22 +120,37 @@ export const detectProactiveSuggestions = functions
       const confidenceMatch = analysisText.match(/confidence:\s*(\d+)/i);
       const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 0;
       
-      if (confidence > 80) {
-        // Create suggestion insight
+      // Extract suggested times
+      const timesMatch = analysisText.match(/Times:\s*([\s\S]*?)(?:\n\n|$)/i);
+      const suggestedTimes = timesMatch ? timesMatch[1].trim() : '';
+      
+      // Extract suggestion message
+      const suggestionMatch = analysisText.match(/Suggestion:\s*([^\n]+)/i);
+      const suggestionText = suggestionMatch ? suggestionMatch[1].trim() : 'Would you like help coordinating schedules?';
+      
+      if (confidence > 70) {
+        // Create enhanced suggestion insight with time options
         const insightRef = admin.firestore()
           .collection('conversations')
           .doc(conversationId)
           .collection('insights')
           .doc();
         
+        // Build suggestion content with times
+        let content = suggestionText;
+        if (suggestedTimes) {
+          content += '\n\n' + suggestedTimes;
+        }
+        
         const insight = {
           id: insightRef.id,
           conversationId: conversationId,
           type: 'suggestion',
-          content: 'Would you like me to help find a time that works for everyone?',
+          content: content,
           metadata: {
             action: 'scheduling_help',
             confidence: confidence / 100,
+            suggestedTimes: suggestedTimes || null,
           },
           messageIds: [message.id],
           triggeredBy: 'system',
@@ -129,6 +161,7 @@ export const detectProactiveSuggestions = functions
         await insightRef.set(insight);
         
         console.log(`✅ Scheduling suggestion created (confidence: ${confidence}%)`);
+        console.log(`   Times suggested: ${suggestedTimes || 'none'}`);
       } else {
         console.log(`ℹ️ Confidence too low for suggestion: ${confidence}%`);
       }

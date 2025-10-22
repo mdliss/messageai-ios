@@ -93,8 +93,20 @@ export const summarizeConversation = functions
         max_tokens: 500,
         temperature: 0.7,
         messages: [{
+          role: 'system',
+          content: 'You are an intelligent assistant helping remote team professionals cut through communication noise. Your summaries help people catch up on conversations in seconds instead of reading hundreds of messages. Never use hyphens. Be concise and actionable.',
+        }, {
           role: 'user',
-          content: `Summarize this team conversation in exactly 3 concise bullet points. Each bullet should be one sentence and capture key information, decisions, or action items. Never use hyphens - write "non profit" not "non-profit".\n\nConversation:\n${transcript}`,
+          content: `Summarize this remote team conversation in exactly 3 concise bullet points. Focus on:
+- Key decisions made
+- Action items with owners
+- Important context or blockers
+- Technical discussions
+
+Each bullet should be one sentence maximum. Never use hyphens.
+
+Conversation:
+${transcript}`,
         }],
       });
       

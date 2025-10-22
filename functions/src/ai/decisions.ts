@@ -89,12 +89,22 @@ export const detectDecision = functions
       });
       
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         max_tokens: 200,
         temperature: 0.7,
         messages: [{
+          role: 'system',
+          content: 'You are an intelligent assistant helping remote teams track important decisions that often get buried in chat history. Extract clear, specific decisions so teams never have to search through hundreds of messages. Never use hyphens.',
+        }, {
           role: 'user',
-          content: `Extract the decision from this conversation. Be concise and specific. Format: "Decision: [what was decided]". Never use hyphens.\n\nConversation:\n${transcript}`,
+          content: `Extract the key decision from this remote team conversation. Be concise and specific about what was decided and any relevant context.
+
+Format as a clear statement without the word "Decision:" prefix. Just state what was decided.
+
+Never use hyphens.
+
+Conversation:
+${transcript}`,
         }],
       });
       
