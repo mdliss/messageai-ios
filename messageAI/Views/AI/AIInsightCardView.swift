@@ -11,6 +11,14 @@ import SwiftUI
 struct AIInsightCardView: View {
     let insight: AIInsight
     let onDismiss: () -> Void
+    let onAcceptSuggestion: (() -> Void)?
+    
+    // Initialize with optional accept callback
+    init(insight: AIInsight, onDismiss: @escaping () -> Void, onAcceptSuggestion: (() -> Void)? = nil) {
+        self.insight = insight
+        self.onDismiss = onDismiss
+        self.onAcceptSuggestion = onAcceptSuggestion
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -26,6 +34,7 @@ struct AIInsightCardView: View {
                 
                 Spacer()
                 
+                // Dismiss button (always visible)
                 Button {
                     onDismiss()
                 } label: {
@@ -39,6 +48,45 @@ struct AIInsightCardView: View {
             Text(insight.content)
                 .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)
+            
+            // Interactive buttons for scheduling suggestions
+            if insight.type == .suggestion, 
+               let metadata = insight.metadata,
+               metadata.action == "scheduling_help",
+               let onAccept = onAcceptSuggestion {
+                
+                HStack(spacing: 12) {
+                    // Accept button
+                    Button {
+                        onAccept()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("yes, help me")
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.orange)
+                        .cornerRadius(8)
+                    }
+                    
+                    // Decline button
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Text("no thanks")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                }
+                .padding(.top, 4)
+            }
             
             // Metadata
             HStack {

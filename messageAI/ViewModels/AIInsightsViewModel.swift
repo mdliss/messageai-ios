@@ -136,6 +136,87 @@ class AIInsightsViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Accept Scheduling Suggestion
+    
+    /// Accept scheduling suggestion and post suggested times as AI assistant message
+    /// - Parameters:
+    ///   - insight: The scheduling suggestion insight
+    ///   - conversationId: Conversation ID
+    ///   - currentUserId: Current user ID
+    ///   - currentUserName: Current user display name
+    func acceptSuggestion(insight: AIInsight, conversationId: String, currentUserId: String, currentUserName: String) async {
+        do {
+            // Extract suggested times from insight metadata or content
+            let suggestedTimes = insight.metadata?.suggestedTimes ?? extractTimesFromContent(insight.content)
+            
+            // Create AI assistant message with suggested times
+            let assistantMessage = """
+            🤖 scheduling assistant
+            
+            based on the conversation, here are some suggested meeting times:
+            
+            \(suggestedTimes)
+            
+            please let me know which time works best for everyone, or if you need different options.
+            """
+            
+            // Post as a system message (AI assistant)
+            let messageRef = db.collection("conversations")
+                .document(conversationId)
+                .collection("messages")
+                .document()
+            
+            let message: [String: Any] = [
+                "id": messageRef.documentID,
+                "conversationId": conversationId,
+                "senderId": "ai_assistant",
+                "senderName": "ai assistant",
+                "senderPhotoURL": NSNull(),
+                "type": "text",
+                "text": assistantMessage,
+                "imageURL": NSNull(),
+                "createdAt": FieldValue.serverTimestamp(),
+                "status": "sent",
+                "deliveredTo": [],
+                "readBy": [],
+                "localId": NSNull(),
+                "isSynced": true,
+                "priority": false
+            ]
+            
+            try await messageRef.setData(message)
+            
+            // Dismiss the suggestion insight
+            await dismissInsight(insightId: insight.id, conversationId: conversationId)
+            
+            print("✅ Scheduling suggestion accepted and posted as AI assistant message")
+            
+        } catch {
+            errorMessage = "Failed to accept suggestion: \(error.localizedDescription)"
+            print("❌ Failed to accept suggestion: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Extract suggested times from content if not in metadata
+    private func extractTimesFromContent(_ content: String) -> String {
+        // Look for "Times:" section in content
+        if let timesRange = content.range(of: "Times:", options: .caseInsensitive) {
+            let timesSection = String(content[timesRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // If times are found, return them formatted
+            if !timesSection.isEmpty {
+                return timesSection
+            }
+        }
+        
+        // Fallback: return generic suggestion
+        return """
+        • tomorrow 2pm EST / 11am PST / 7pm GMT
+        • thursday 10am EST / 7am PST / 3pm GMT
+        • friday 3pm EST / 12pm PST / 8pm GMT
+        """
+    }
+    
     // MARK: - Dismiss Insight
     
     /// Dismiss an insight

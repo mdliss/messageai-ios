@@ -122,17 +122,20 @@ struct InsightMetadata: Codable, Equatable {
     var approvedBy: [String]?
     var action: String?
     var confidence: Double?
+    var suggestedTimes: String?
     
     init(bulletPoints: Int? = nil,
          messageCount: Int? = nil,
          approvedBy: [String]? = nil,
          action: String? = nil,
-         confidence: Double? = nil) {
+         confidence: Double? = nil,
+         suggestedTimes: String? = nil) {
         self.bulletPoints = bulletPoints
         self.messageCount = messageCount
         self.approvedBy = approvedBy
         self.action = action
         self.confidence = confidence
+        self.suggestedTimes = suggestedTimes
     }
     
     func toDictionary() -> [String: Any] {
@@ -152,6 +155,9 @@ struct InsightMetadata: Codable, Equatable {
         }
         if let confidence = confidence {
             dict["confidence"] = confidence
+        }
+        if let suggestedTimes = suggestedTimes {
+            dict["suggestedTimes"] = suggestedTimes
         }
         
         return dict

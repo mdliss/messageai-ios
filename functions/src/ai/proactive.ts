@@ -87,27 +87,44 @@ export const detectProactiveSuggestions = functions
         apiKey: apiKey,
       });
       
+      // Get current day and time for better suggestions
+      const now = new Date();
+      const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+      const currentHour = now.getHours();
+      
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
-        max_tokens: 500,
+        max_tokens: 600,
         temperature: 0.7,
         messages: [{
           role: 'system',
-          content: 'You are a proactive scheduling assistant for remote teams. Analyze conversations to detect scheduling needs and suggest concrete meeting times. Never use hyphens. Be concise and actionable.',
+          content: 'You are a proactive scheduling assistant for remote teams working across time zones. Analyze conversations to detect scheduling needs and suggest concrete meeting times that work globally. Never use hyphens. Be concise and actionable. Always provide times in multiple major time zones (EST, PST, GMT, IST) to help distributed teams.',
         }, {
           role: 'user',
-          content: `Analyze this conversation for scheduling needs. If there is a clear need to coordinate schedules or set up a meeting:
+          content: `Analyze this conversation for scheduling needs. Current context: ${dayOfWeek}, ${currentHour}:00.
+
+If there is a clear need to coordinate schedules or set up a meeting:
 
 1. Rate confidence (0-100) that they need scheduling help
-2. Suggest 2-3 specific time options based on typical working hours across time zones
+2. Suggest 3 specific time options considering:
+   • Avoid early mornings (before 9am) and late evenings (after 6pm) in all time zones when possible
+   • Prefer Tuesday through Thursday for better attendance
+   • Suggest times during typical overlap hours: 9am-11am PST / 12pm-2pm EST / 5pm-7pm GMT / 10:30pm-12:30am IST
+   • Consider urgency mentioned in the conversation
+   
 3. Format as:
 
 Confidence: [number]
-Suggestion: [helpful message about coordinating schedules]
+Suggestion: [one sentence about helping coordinate schedules]
 Times:
-- Option 1: [specific time suggestion, e.g., "Tomorrow 2pm EST / 11am PST"]
-- Option 2: [alternative time]
-- Option 3: [alternative time]
+• option 1: [day] [time] EST / [time] PST / [time] GMT / [time] IST
+• option 2: [day] [time] EST / [time] PST / [time] GMT / [time] IST  
+• option 3: [day] [time] EST / [time] PST / [time] GMT / [time] IST
+
+Examples of good suggestions:
+• tomorrow 2pm EST / 11am PST / 7pm GMT / 12:30am IST (next day)
+• thursday 10am EST / 7am PST / 3pm GMT / 8:30pm IST
+• friday 1pm EST / 10am PST / 6pm GMT / 11:30pm IST
 
 Conversation:
 ${transcript}`,

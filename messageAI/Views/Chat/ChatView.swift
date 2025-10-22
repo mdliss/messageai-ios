@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import FirebaseAuth
 
 struct ChatView: View {
     let conversation: Conversation
@@ -67,14 +68,22 @@ struct ChatView: View {
                     
                     // AI Insights
                     ForEach(aiViewModel.insights) { insight in
-                        AIInsightCardView(insight: insight) {
-                            Task {
-                                await aiViewModel.dismissInsight(
-                                    insightId: insight.id,
-                                    conversationId: conversation.id
-                                )
-                            }
-                        }
+                        let isSchedulingSuggestion = insight.type == .suggestion
+                        
+                        AIInsightCardView(
+                            insight: insight,
+                            onDismiss: {
+                                Task {
+                                    await aiViewModel.dismissInsight(
+                                        insightId: insight.id,
+                                        conversationId: conversation.id
+                                    )
+                                }
+                            },
+                            onAcceptSuggestion: isSchedulingSuggestion ? {
+                                handleAcceptSuggestion(insight)
+                            } : nil
+                        )
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
@@ -296,6 +305,21 @@ struct ChatView: View {
                 senderId: currentUserId,
                 senderName: participant?.displayName ?? "You",
                 senderPhotoURL: participant?.photoURL
+            )
+        }
+    }
+    
+    // MARK: - Handle Scheduling Suggestion
+    
+    private func handleAcceptSuggestion(_ insight: AIInsight) {
+        Task {
+            let userName = AuthService.shared.currentFirebaseUser?.displayName ?? "user"
+            
+            await aiViewModel.acceptSuggestion(
+                insight: insight,
+                conversationId: conversation.id,
+                currentUserId: currentUserId,
+                currentUserName: userName
             )
         }
     }
