@@ -34,7 +34,7 @@ struct SearchView: View {
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
-                } else if viewModel.searchResults.isEmpty {
+                } else if viewModel.aiSearchResults.isEmpty && viewModel.searchResults.isEmpty {
                     // No results
                     VStack(spacing: 16) {
                         Image(systemName: "doc.text.magnifyingglass")
@@ -44,24 +44,43 @@ struct SearchView: View {
                         Text("no results found")
                             .font(.headline)
                         
-                        Text("try different keywords")
+                        Text("try different keywords or a more general query")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     }
                 } else {
-                    // Results list
+                    // Results list (AI or keyword)
                     List {
-                        ForEach(Array(viewModel.groupedResults().keys.sorted()), id: \.self) { conversationId in
-                            if let messages = viewModel.groupedResults()[conversationId] {
-                                Section {
-                                    ForEach(messages) { message in
-                                        SearchResultView(
-                                            message: message,
-                                            searchQuery: searchText
-                                        )
+                        if !viewModel.aiSearchResults.isEmpty {
+                            // AI Search Results
+                            Section {
+                                ForEach(viewModel.aiSearchResults) { result in
+                                    AISearchResultRow(result: result)
+                                }
+                            } header: {
+                                HStack {
+                                    Image(systemName: "sparkles")
+                                        .foregroundStyle(.purple)
+                                    Text("ai search results (\(viewModel.aiSearchResults.count))")
+                                        .textCase(.none)
+                                }
+                            }
+                        } else {
+                            // Keyword Search Results (fallback)
+                            ForEach(Array(viewModel.groupedResults().keys.sorted()), id: \.self) { conversationId in
+                                if let messages = viewModel.groupedResults()[conversationId] {
+                                    Section {
+                                        ForEach(messages) { message in
+                                            SearchResultView(
+                                                message: message,
+                                                searchQuery: searchText
+                                            )
+                                        }
+                                    } header: {
+                                        Text("\(messages.count) \(messages.count == 1 ? "result" : "results")")
                                     }
-                                } header: {
-                                    Text("\(messages.count) \(messages.count == 1 ? "result" : "results")")
                                 }
                             }
                         }
@@ -127,6 +146,61 @@ struct SearchResultView: View {
         }
         
         return attributedString
+    }
+}
+
+/// AI search result row
+struct AISearchResultRow: View {
+    let result: AISearchResult
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Sender and timestamp
+            HStack {
+                Text(result.senderName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                
+                Spacer()
+                
+                Text(result.timestamp, style: .relative)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            
+            // Message snippet
+            Text(result.snippet)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+            
+            // Relevance indicator
+            HStack(spacing: 6) {
+                // Relevance stars
+                HStack(spacing: 2) {
+                    ForEach(0..<5) { index in
+                        Image(systemName: index < Int(result.score * 5) ? "star.fill" : "star")
+                            .font(.caption2)
+                            .foregroundStyle(.yellow)
+                    }
+                }
+                
+                Text("\(Int(result.score * 100))% match")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                
+                Spacer()
+                
+                Image(systemName: "arrow.up.forward.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+                
+                Text("view in chat")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 

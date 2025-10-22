@@ -10,8 +10,19 @@ import Foundation
 import SwiftUI
 import Combine
 import FirebaseFirestore
+import FirebaseFunctions
 
-/// ViewModel managing chat functionality
+/// Search result model
+struct SearchResult: Identifiable {
+    let id: String
+    let messageId: String
+    let text: String
+    let senderName: String
+    let timestamp: Date
+    let score: Double
+    let snippet: String
+}
+
 @MainActor
 class ChatViewModel: ObservableObject {
     @Published var messages: [Message] = []
@@ -23,6 +34,8 @@ class ChatViewModel: ObservableObject {
     @Published var typingUserNames: [String: String] = [:]
     @Published var isLoadingOlderMessages = false
     @Published var hasMoreMessages = true
+    @Published var searchResults: [SearchResult] = []
+    @Published var isSearching = false
     
     private let firestoreService = FirestoreService.shared
     private let coreDataService = CoreDataService.shared
@@ -524,6 +537,82 @@ class ChatViewModel: ObservableObject {
         }
     }
     
+    // MARK: - AI Search
+    
+    /// Search messages using AI semantic search
+    /// - Parameter query: Natural language search query
+    func searchMessages(query: String) async {
+        guard let conversationId = conversationId else {
+            errorMessage = "No conversation selected"
+            return
+        }
+        
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            searchResults = []
+            return
+        }
+        
+        isSearching = true
+        searchResults = []
+        
+        print("🔍 Starting AI search for: \"\(query)\"")
+        
+        do {
+            let functions = Functions.functions()
+            let result = try await functions.httpsCallable("searchMessages").call([
+                "conversationId": conversationId,
+                "query": query,
+                "limit": 10
+            ])
+            
+            guard let data = result.data as? [String: Any],
+                  let resultsData = data["results"] as? [[String: Any]] else {
+                throw NSError(domain: "Search", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response format"])
+            }
+            
+            // Parse search results
+            let parsedResults = resultsData.compactMap { resultDict -> SearchResult? in
+                guard let messageId = resultDict["messageId"] as? String,
+                      let text = resultDict["text"] as? String,
+                      let senderName = resultDict["senderName"] as? String,
+                      let timestampStr = resultDict["timestamp"] as? String,
+                      let score = resultDict["score"] as? Double,
+                      let snippet = resultDict["snippet"] as? String else {
+                    return nil
+                }
+                
+                // Parse timestamp
+                let formatter = ISO8601DateFormatter()
+                let timestamp = formatter.date(from: timestampStr) ?? Date()
+                
+                return SearchResult(
+                    id: messageId,
+                    messageId: messageId,
+                    text: text,
+                    senderName: senderName,
+                    timestamp: timestamp,
+                    score: score,
+                    snippet: snippet
+                )
+            }
+            
+            searchResults = parsedResults
+            isSearching = false
+            
+            print("✅ Search complete: found \(parsedResults.count) results")
+            
+        } catch {
+            isSearching = false
+            errorMessage = "Search failed: \(error.localizedDescription)"
+            print("❌ Search failed: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Clear search results
+    func clearSearch() {
+        searchResults = []
+    }
+    
     // MARK: - Cleanup
     
     /// Clean up subscriptions
@@ -547,6 +636,7 @@ class ChatViewModel: ObservableObject {
         currentUserId = nil
         messages = []
         typingUsers = []
+        searchResults = []
     }
     
     deinit {
