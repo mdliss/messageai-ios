@@ -92,53 +92,61 @@ export const searchMessages = functions
       
       console.log(`📊 Searching through ${messages.length} messages`);
       
-      // For MVP: Use GPT to rerank instead of generating embeddings for all messages
-      // This is faster and more cost effective for smaller message sets
-      // Future enhancement: Generate embeddings for all messages and use cosine similarity
+      // Hybrid approach: keyword matching + AI semantic understanding
+      const queryLower = query.toLowerCase();
       
-      // Build context with recent messages
-      const messageContext = messages.slice(0, 50).map((msg, idx) => 
-        `[${idx}] ${msg.senderName}: ${msg.text}`
-      ).join('\n');
+      // Step 1: Get keyword candidates (fast)
+      const keywordMatches = messages.filter(msg => 
+        msg.text.toLowerCase().includes(queryLower) ||
+        queryLower.split(/\s+/).some(word => 
+          word.length > 2 && msg.text.toLowerCase().includes(word)
+        )
+      );
       
-      // Use GPT to find relevant messages
-      const rerankedResponse = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        max_tokens: 1000,
-        temperature: 0.3,
-        messages: [{
-          role: 'system',
-          content: 'You are a semantic search assistant. Given a query and a list of messages, identify the most relevant messages by their index numbers. Return ONLY a JSON array of index numbers in order of relevance. Never use hyphens.',
-        }, {
-          role: 'user',
-          content: `Query: "${query}"
-
-Messages:
-${messageContext}
-
-Return the indices of the top ${limit} most relevant messages as a JSON array. Example: [5, 12, 3, 8]
-
-Only return the JSON array, nothing else.`,
-        }],
-      });
+      console.log(`📊 Keyword matching found ${keywordMatches.length} candidates`);
       
-      const rerankedText = rerankedResponse.choices[0]?.message?.content || '[]';
+      // Step 2: If no keyword matches, use AI to expand query and search again
+      let finalMatches = keywordMatches;
       
-      // Parse the JSON array of indices
-      let relevantIndices: number[] = [];
-      try {
-        relevantIndices = JSON.parse(rerankedText.trim());
-      } catch (error) {
-        console.error('❌ Failed to parse reranked results, falling back to keyword search');
-        // Fallback: simple keyword matching
-        const queryLower = query.toLowerCase();
-        const keywordMatches = messages
-          .map((msg, idx) => ({ msg, idx }))
-          .filter(({msg}) => msg.text.toLowerCase().includes(queryLower))
-          .slice(0, limit)
-          .map(({idx}) => idx);
-        relevantIndices = keywordMatches;
+      if (keywordMatches.length === 0 && messages.length > 0) {
+        try {
+          console.log(`🤖 No keyword matches, using AI to expand query...`);
+          
+          // Ask AI for related terms
+          const expansionResponse = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            max_tokens: 50,
+            temperature: 0.3,
+            messages: [{
+              role: 'user',
+              content: `List 5 related keywords for: "${query}". Return only comma-separated words. Example: "meeting,schedule,calendar,sync,coordinate"`
+            }],
+          });
+          
+          const relatedTerms = expansionResponse.choices[0]?.message?.content || '';
+          const expandedKeywords = relatedTerms.split(',').map(t => t.trim().toLowerCase());
+          
+          console.log(`🔍 Expanded keywords: ${expandedKeywords.join(', ')}`);
+          
+          // Search with expanded keywords
+          finalMatches = messages.filter(msg => {
+            const textLower = msg.text.toLowerCase();
+            return expandedKeywords.some(keyword => textLower.includes(keyword));
+          });
+          
+          console.log(`📊 Expanded search found ${finalMatches.length} matches`);
+        } catch (error) {
+          console.log(`⚠️ Query expansion failed: ${error}`);
+        }
       }
+      
+      // Step 3: Take top results
+      const relevantIndices = finalMatches
+        .slice(0, limit)
+        .map(msg => messages.indexOf(msg))
+        .filter(idx => idx >= 0);
+      
+      console.log(`📋 Returning ${relevantIndices.length} final results`);
       
       // Build search results
       const searchResults: SearchResult[] = relevantIndices
