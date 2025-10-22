@@ -12,6 +12,7 @@ struct SearchView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SearchViewModel()
     @State private var searchText = ""
+    @State private var debounceTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -141,16 +142,37 @@ struct SearchView: View {
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "search messages")
-            .onChange(of: searchText) { _, newValue in
-                Task {
+            .searchable(text: $searchText, prompt: "search messages with AI")
+            .onChange(of: searchText) { oldValue, newValue in
+                print("🔍 Search text changed: \"\(oldValue)\" → \"\(newValue)\"")
+                
+                // Cancel previous search
+                debounceTask?.cancel()
+                
+                // Debounce search (wait 500ms after user stops typing)
+                debounceTask = Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    
+                    guard !Task.isCancelled else { 
+                        print("🔍 Search task cancelled")
+                        return 
+                    }
+                    
+                    print("🔍 Triggering AI search for: \"\(newValue)\"")
                     await viewModel.search(query: newValue)
                 }
             }
             .onAppear {
                 // Set current user ID for AI search
                 viewModel.currentUserId = authViewModel.currentUser?.id
-                print("🔍 SearchView appeared, user ID: \(authViewModel.currentUser?.id ?? "none")")
+                print("🔍 ═══════════════════════════════════════")
+                print("🔍 SearchView APPEARED")
+                print("🔍 User ID: \(authViewModel.currentUser?.id ?? "NOT SET")")
+                print("🔍 AI Search: \(viewModel.useAISearch ? "ENABLED" : "DISABLED")")
+                print("🔍 ═══════════════════════════════════════")
+            }
+            .onDisappear {
+                debounceTask?.cancel()
             }
         }
     }
