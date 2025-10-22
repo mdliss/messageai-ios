@@ -186,12 +186,16 @@ export const confirmSchedulingSelection = functions
           
           await finalMessageRef.set(finalMessage);
           
-          // Mark poll as completed (dismissed)
+          // KEEP poll visible but mark as finalized
           await activePoll.ref.update({
-            dismissed: true
+            'metadata.finalized': true,
+            'metadata.winningOption': winningOption,
+            'metadata.winningTime': winningTime,
+            'metadata.totalVotes': participantIds.length
           });
           
-          console.log(`✅ Poll completed! Winning option: ${winningOption} with ${maxVotes} votes`);
+          console.log(`✅ Poll completed and saved to decisions! Winning option: ${winningOption} with ${maxVotes} votes`);
+          console.log(`   Decision will remain visible in decisions tab with results`);
         } else {
           // Acknowledge vote but don't finalize yet
           const confirmationRef = admin.firestore()

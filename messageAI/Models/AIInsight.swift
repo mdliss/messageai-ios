@@ -128,6 +128,10 @@ struct InsightMetadata: Codable, Equatable {
     var isPoll: Bool?
     var timeOptions: [String]?
     var createdBy: String?
+    var finalized: Bool?
+    var winningOption: String?
+    var winningTime: String?
+    var totalVotes: Int?
     
     init(bulletPoints: Int? = nil,
          messageCount: Int? = nil,
@@ -139,7 +143,11 @@ struct InsightMetadata: Codable, Equatable {
          votes: [String: String]? = nil,
          isPoll: Bool? = nil,
          timeOptions: [String]? = nil,
-         createdBy: String? = nil) {
+         createdBy: String? = nil,
+         finalized: Bool? = nil,
+         winningOption: String? = nil,
+         winningTime: String? = nil,
+         totalVotes: Int? = nil) {
         self.bulletPoints = bulletPoints
         self.messageCount = messageCount
         self.approvedBy = approvedBy
@@ -151,6 +159,10 @@ struct InsightMetadata: Codable, Equatable {
         self.isPoll = isPoll
         self.timeOptions = timeOptions
         self.createdBy = createdBy
+        self.finalized = finalized
+        self.winningOption = winningOption
+        self.winningTime = winningTime
+        self.totalVotes = totalVotes
     }
     
     func toDictionary() -> [String: Any] {
@@ -188,6 +200,18 @@ struct InsightMetadata: Codable, Equatable {
         }
         if let createdBy = createdBy {
             dict["createdBy"] = createdBy
+        }
+        if let finalized = finalized {
+            dict["finalized"] = finalized
+        }
+        if let winningOption = winningOption {
+            dict["winningOption"] = winningOption
+        }
+        if let winningTime = winningTime {
+            dict["winningTime"] = winningTime
+        }
+        if let totalVotes = totalVotes {
+            dict["totalVotes"] = totalVotes
         }
         
         return dict

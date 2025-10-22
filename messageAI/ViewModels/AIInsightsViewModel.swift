@@ -16,7 +16,6 @@ import FirebaseFunctions
 @MainActor
 class AIInsightsViewModel: ObservableObject {
     @Published var insights: [AIInsight] = []
-    @Published var currentUserSummary: AIInsight? = nil  // Per-user summary (not shared)
     @Published var isLoading = false
     @Published var errorMessage: String?
     
@@ -24,7 +23,6 @@ class AIInsightsViewModel: ObservableObject {
     private let db = FirebaseConfig.shared.db
     
     private var insightsTask: Task<Void, Never>?
-    private var summaryTask: Task<Void, Never>?
     
     // MARK: - Subscribe to Insights
     
@@ -59,9 +57,9 @@ class AIInsightsViewModel: ObservableObject {
                 let fetchedInsights = documents.compactMap { document -> AIInsight? in
                     try? document.data(as: AIInsight.self)
                 }.filter { insight in
-                    // CRITICAL FIX: Exclude summaries (they're now per-user)
+                    // Show summaries ONLY to the user who requested them
                     if insight.type == .summary {
-                        return false
+                        return insight.triggeredBy == currentUserId
                     }
                     
                     // Show all insights except suggestions targeted at other users
@@ -75,62 +73,7 @@ class AIInsightsViewModel: ObservableObject {
                 
                 Task { @MainActor in
                     self.insights = fetchedInsights
-                    print("✅ Fetched \(fetchedInsights.count) shared insights (no summaries, filtered for user \(currentUserId))")
-                }
-            }
-            
-            // Keep listener alive
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
-            
-            listener.remove()
-        }
-        
-        // Subscribe to PER-USER summaries (ephemeral, not shared)
-        subscribeToUserSummaries(conversationId: conversationId, currentUserId: currentUserId)
-    }
-    
-    /// Subscribe to current user's ephemeral summaries
-    /// - Parameters:
-    ///   - conversationId: Conversation ID
-    ///   - currentUserId: Current user ID
-    private func subscribeToUserSummaries(conversationId: String, currentUserId: String) {
-        let summaryRef = db.collection("users")
-            .document(currentUserId)
-            .collection("ephemeral")
-            .document("summaries")
-            .collection(conversationId)
-            .order(by: "createdAt", descending: true)
-            .limit(to: 1)  // Only need the latest summary
-        
-        summaryTask = Task {
-            let listener = summaryRef.addSnapshotListener { [weak self] snapshot, error in
-                guard let self = self else { return }
-                
-                if let error = error {
-                    print("❌ Error fetching user summary: \(error.localizedDescription)")
-                    return
-                }
-                
-                guard let documents = snapshot?.documents,
-                      let latestDoc = documents.first else {
-                    Task { @MainActor in
-                        self.currentUserSummary = nil
-                    }
-                    return
-                }
-                
-                if let summary = try? latestDoc.data(as: AIInsight.self),
-                   !summary.dismissed {
-                    Task { @MainActor in
-                        self.currentUserSummary = summary
-                        print("✅ Fetched per-user summary (only visible to \(currentUserId))")
-                    }
-                } else {
-                    Task { @MainActor in
-                        self.currentUserSummary = nil
-                    }
+                    print("✅ Fetched \(fetchedInsights.count) insights (summaries filtered by triggeredBy)")
                 }
             }
             
@@ -145,59 +88,31 @@ class AIInsightsViewModel: ObservableObject {
     
     // MARK: - Summarize
     
-    /// Summarize conversation (per-user, not shared)
+    /// Summarize conversation
     /// - Parameters:
     ///   - conversationId: Conversation ID
-    ///   - currentUserId: Current user ID
+    ///   - currentUserId: Current user ID (for triggeredBy filter)
     /// - Returns: AI insight with summary
     func summarize(conversationId: String, currentUserId: String) async throws -> AIInsight {
         isLoading = true
         errorMessage = nil
         
         do {
-            // Call Cloud Function to generate summary
+            // Call Cloud Function - it will store in shared insights collection
+            // Client filters to show only to requesting user via triggeredBy field
             let result = try await functions.httpsCallable("summarizeConversation").call([
-                "conversationId": conversationId,
-                "userId": currentUserId  // Pass user ID for per-user storage
+                "conversationId": conversationId
             ])
             
             guard let data = result.data as? [String: Any],
                   let insightData = data["insight"] as? [String: Any],
                   let jsonData = try? JSONSerialization.data(withJSONObject: insightData),
-                  var insight = try? JSONDecoder().decode(AIInsight.self, from: jsonData) else {
+                  let insight = try? JSONDecoder().decode(AIInsight.self, from: jsonData) else {
                 throw AIError.invalidResponse
             }
             
-            // CRITICAL FIX: Store summary in per-user ephemeral collection
-            // Path: users/{userId}/ephemeral/summaries/{conversationId}/{summaryId}
-            let summaryRef = db.collection("users")
-                .document(currentUserId)
-                .collection("ephemeral")
-                .document("summaries")
-                .collection(conversationId)
-                .document()
-            
-            // Update insight ID to match the Firestore document
-            insight = AIInsight(
-                id: summaryRef.documentID,
-                conversationId: insight.conversationId,
-                type: insight.type,
-                content: insight.content,
-                metadata: insight.metadata,
-                messageIds: insight.messageIds,
-                triggeredBy: currentUserId,
-                createdAt: insight.createdAt,
-                expiresAt: insight.expiresAt,
-                userFeedback: insight.userFeedback,
-                dismissed: insight.dismissed
-            )
-            
-            // Save to per-user location
-            try await summaryRef.setData(insight.toDictionary())
-            
             isLoading = false
-            print("✅ Summary generated and stored per-user for \(currentUserId)")
-            print("   Path: users/\(currentUserId)/ephemeral/summaries/\(conversationId)/\(summaryRef.documentID)")
+            print("✅ Summary generated and will appear as popup (filtered by triggeredBy)")
             return insight
             
         } catch {
@@ -423,43 +338,22 @@ class AIInsightsViewModel: ObservableObject {
     /// - Parameters:
     ///   - insightId: Insight ID
     ///   - conversationId: Conversation ID
-    ///   - currentUserId: Current user ID (needed for per-user summaries)
+    ///   - currentUserId: Current user ID
     func dismissInsight(insightId: String, conversationId: String, currentUserId: String) async {
         do {
-            // Check if this is a summary (per-user) or shared insight
-            if currentUserSummary?.id == insightId {
-                // Dismiss per-user summary
-                let summaryRef = db.collection("users")
-                    .document(currentUserId)
-                    .collection("ephemeral")
-                    .document("summaries")
-                    .collection(conversationId)
-                    .document(insightId)
-                
-                try await summaryRef.updateData([
-                    "dismissed": true
-                ])
-                
-                // Clear from local state
-                currentUserSummary = nil
-                
-                print("✅ Per-user summary dismissed: \(insightId)")
-            } else {
-                // Dismiss shared insight
-                let insightRef = db.collection("conversations")
-                    .document(conversationId)
-                    .collection("insights")
-                    .document(insightId)
-                
-                try await insightRef.updateData([
-                    "dismissed": true
-                ])
-                
-                // Remove from local array
-                insights.removeAll { $0.id == insightId }
-                
-                print("✅ Shared insight dismissed: \(insightId)")
-            }
+            let insightRef = db.collection("conversations")
+                .document(conversationId)
+                .collection("insights")
+                .document(insightId)
+            
+            try await insightRef.updateData([
+                "dismissed": true
+            ])
+            
+            // Remove from local array
+            insights.removeAll { $0.id == insightId }
+            
+            print("✅ Insight dismissed: \(insightId)")
         } catch {
             errorMessage = "Failed to dismiss insight: \(error.localizedDescription)"
             print("❌ Failed to dismiss insight: \(error.localizedDescription)")
@@ -470,14 +364,11 @@ class AIInsightsViewModel: ObservableObject {
     
     func cleanup() {
         insightsTask?.cancel()
-        summaryTask?.cancel()
         insights = []
-        currentUserSummary = nil
     }
     
     deinit {
         insightsTask?.cancel()
-        summaryTask?.cancel()
     }
 }
 

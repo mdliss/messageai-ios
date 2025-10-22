@@ -194,25 +194,7 @@ struct ChatView: View {
             
             // Floating AI Insights Overlay (bottom)
             VStack(spacing: 8) {
-                // Show per-user summary (if exists) - ONLY visible to requester
-                if let summary = aiViewModel.currentUserSummary {
-                    AIInsightCardView(
-                        insight: summary,
-                        onDismiss: {
-                            Task {
-                                await aiViewModel.dismissInsight(
-                                    insightId: summary.id,
-                                    conversationId: conversation.id,
-                                    currentUserId: currentUserId
-                                )
-                            }
-                        },
-                        onAcceptSuggestion: nil
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                
-                // Show shared insights (excluding summaries)
+                // Show all insights (summaries filtered by triggeredBy, shown only to requester)
                 ForEach(aiViewModel.insights) { insight in
                     let isSchedulingSuggestion = insight.type == .suggestion
                     
@@ -235,7 +217,7 @@ struct ChatView: View {
                 }
             }
             .padding(.bottom, 60)
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: aiViewModel.insights.count + (aiViewModel.currentUserSummary != nil ? 1 : 0))
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: aiViewModel.insights.count)
         }
         .navigationTitle(conversation.displayName(for: currentUserId))
         .navigationBarTitleDisplayMode(.inline)

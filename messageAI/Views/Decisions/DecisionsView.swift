@@ -152,27 +152,32 @@ struct PollView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Poll title
+            // Poll title with finalization status
             HStack {
-                Image(systemName: "chart.bar.fill")
-                    .foregroundStyle(.orange)
-                Text("meeting time poll")
+                Image(systemName: decision.metadata?.finalized == true ? "checkmark.circle.fill" : "chart.bar.fill")
+                    .foregroundStyle(decision.metadata?.finalized == true ? .green : .orange)
+                Text(decision.metadata?.finalized == true ? "meeting scheduled ✓" : "meeting time poll")
                     .font(.headline)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(decision.metadata?.finalized == true ? .green : .orange)
             }
             
             // Get time options - parse from metadata or content as fallback
             let displayOptions = getTimeOptions()
             
-            // ALWAYS show voting buttons (never just text)
+            // Show finalized result or voting buttons
+            let isFinalized = decision.metadata?.finalized == true
+            
             ForEach(Array(displayOptions.enumerated()), id: \.offset) { index, option in
                 let votes = decision.metadata?.votes ?? [:]
                 let voteCount = votes.values.filter { $0 == "option_\(index + 1)" }.count
                 let hasVoted = votes[currentUserId] == "option_\(index + 1)"
+                let isWinner = isFinalized && decision.metadata?.winningOption == "option_\(index + 1)"
                 
                 Button {
-                    print("🗳️ User \(currentUserId) voting for option \(index + 1)")
-                    onVote(index)
+                    if !isFinalized {
+                        print("🗳️ User \(currentUserId) voting for option \(index + 1)")
+                        onVote(index)
+                    }
                 } label: {
                     HStack {
                         Text(option)
@@ -182,7 +187,17 @@ struct PollView: View {
                         
                         Spacer()
                         
-                        if hasVoted {
+                        if isWinner {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("winner")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.green)
+                                .cornerRadius(12)
+                        } else if hasVoted {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundStyle(.orange)
                         }
@@ -193,19 +208,35 @@ struct PollView: View {
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
-                                .background(Color.orange)
+                                .background(isWinner ? Color.green : Color.orange)
                                 .cornerRadius(12)
                         }
                     }
                     .padding()
-                    .background(hasVoted ? Color.orange.opacity(0.1) : Color.gray.opacity(0.05))
+                    .background(isWinner ? Color.green.opacity(0.15) : hasVoted ? Color.orange.opacity(0.1) : Color.gray.opacity(0.05))
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(hasVoted ? Color.orange : Color.clear, lineWidth: 2)
+                            .stroke(isWinner ? Color.green : hasVoted ? Color.orange : Color.clear, lineWidth: 2)
                     )
                 }
                 .buttonStyle(.plain)
+                .disabled(isFinalized)  // Disable voting after finalization
+            }
+            
+            // Show finalization message if complete
+            if isFinalized, let winningTime = decision.metadata?.winningTime {
+                HStack {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .foregroundStyle(.green)
+                    Text("final decision: \(winningTime)")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.green)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(8)
             }
             
             // Timestamp and stats
