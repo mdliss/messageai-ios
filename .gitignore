@@ -55,3 +55,4 @@ functions/.runtimeconfig.json
 # Build artifacts
 *.dSYM.zip
 *.dSYM
+messageAI/GoogleService-Info.plist
