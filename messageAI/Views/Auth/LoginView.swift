@@ -140,6 +140,9 @@ struct LoginView: View {
                         .disabled(!isFormValid || authViewModel.isLoading)
                         .padding(.horizontal)
                         
+                        // Google Sign In - Disabled for MVP (simulator OAuth issues)
+                        // TODO: Enable after testing on physical device
+                        /*
                         // Divider
                         HStack {
                             Rectangle()
@@ -179,6 +182,7 @@ struct LoginView: View {
                         }
                         .disabled(authViewModel.isLoading)
                         .padding(.horizontal)
+                        */
                         
                         // Register link
                         NavigationLink {

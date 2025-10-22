@@ -35,6 +35,22 @@ struct MessageBubbleView: View {
                         .padding(.leading, 4)
                 }
                 
+                // Priority indicator badge
+                if message.priority == true {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                        Text("urgent")
+                            .font(.caption2.weight(.semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.red)
+                    .cornerRadius(12)
+                    .padding(isFromCurrentUser ? .trailing : .leading, 4)
+                }
+                
                 // Message content
                 if message.type == .text {
                     textBubble

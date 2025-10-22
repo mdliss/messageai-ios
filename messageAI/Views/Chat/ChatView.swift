@@ -20,7 +20,16 @@ struct ChatView: View {
     @State private var selectedImage: UIImage?
     @State private var showFullScreenImage: Message?
     @State private var showAIMenu = false
+    @State private var showOnlyPriority = false  // Priority filter toggle
     @Environment(\.dismiss) private var dismiss
+    
+    // Computed property for filtered messages
+    private var displayedMessages: [Message] {
+        if showOnlyPriority {
+            return viewModel.messages.filter { $0.priority == true }
+        }
+        return viewModel.messages
+    }
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -67,8 +76,30 @@ struct ChatView: View {
                             .listRowBackground(Color.clear)
                     }
                     
-                    // Messages
-                    ForEach(viewModel.messages) { message in
+                    // Priority filter banner
+                    if showOnlyPriority {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                            Text("showing urgent messages only")
+                                .font(.caption.weight(.semibold))
+                            Spacer()
+                            Button("show all") {
+                                withAnimation {
+                                    showOnlyPriority = false
+                                }
+                            }
+                            .font(.caption)
+                        }
+                        .padding()
+                        .background(Color.red.opacity(0.1))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    }
+                    
+                    // Messages (filtered if priority view enabled)
+                    ForEach(displayedMessages) { message in
                         MessageBubbleView(
                             message: message,
                             isFromCurrentUser: message.isFromCurrentUser(userId: currentUserId),
@@ -115,8 +146,16 @@ struct ChatView: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .onChange(of: viewModel.messages.count) { _, _ in
-                    // Auto-scroll to bottom on new message
+                    // Auto-scroll to bottom on new message (use actual messages, not filtered)
                     if let lastMessage = viewModel.messages.last {
+                        withAnimation {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
+                    }
+                }
+                .onChange(of: showOnlyPriority) { _, _ in
+                    // Scroll to bottom when toggling filter
+                    if let lastMessage = displayedMessages.last {
                         withAnimation {
                             proxy.scrollTo(lastMessage.id, anchor: .bottom)
                         }
@@ -215,41 +254,54 @@ struct ChatView: View {
             }
             
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
+                HStack(spacing: 12) {
+                    // Priority filter toggle
                     Button {
-                        Task {
-                            // FIXED: Pass currentUserId for per-user summary storage
-                            try? await aiViewModel.summarize(
-                                conversationId: conversation.id,
-                                currentUserId: currentUserId
+                        withAnimation {
+                            showOnlyPriority.toggle()
+                        }
+                    } label: {
+                        Image(systemName: showOnlyPriority ? "exclamationmark.triangle.fill" : "exclamationmark.triangle")
+                            .foregroundStyle(showOnlyPriority ? .red : .primary)
+                    }
+                    
+                    // AI features menu
+                    Menu {
+                        Button {
+                            Task {
+                                // FIXED: Pass currentUserId for per-user summary storage
+                                try? await aiViewModel.summarize(
+                                    conversationId: conversation.id,
+                                    currentUserId: currentUserId
+                                )
+                            }
+                        } label: {
+                            Label("summarize", systemImage: "doc.text")
+                        }
+                        
+                        Button {
+                            Task {
+                                try? await aiViewModel.extractActionItems(conversationId: conversation.id)
+                            }
+                        } label: {
+                            Label("action items", systemImage: "checklist")
+                        }
+                        
+                        Divider()
+                        
+                        Button {
+                            NetworkMonitor.shared.toggleDebugOfflineMode()
+                        } label: {
+                            Label(
+                                NetworkMonitor.shared.debugOfflineMode ? "go online (debug)" : "go offline (debug)",
+                                systemImage: NetworkMonitor.shared.debugOfflineMode ? "wifi" : "wifi.slash"
                             )
                         }
                     } label: {
-                        Label("summarize", systemImage: "doc.text")
+                        Image(systemName: "sparkles")
                     }
-                    
-                    Button {
-                        Task {
-                            try? await aiViewModel.extractActionItems(conversationId: conversation.id)
-                        }
-                    } label: {
-                        Label("action items", systemImage: "checklist")
-                    }
-                    
-                    Divider()
-                    
-                    Button {
-                        NetworkMonitor.shared.toggleDebugOfflineMode()
-                    } label: {
-                        Label(
-                            NetworkMonitor.shared.debugOfflineMode ? "go online (debug)" : "go offline (debug)",
-                            systemImage: NetworkMonitor.shared.debugOfflineMode ? "wifi" : "wifi.slash"
-                        )
-                    }
-                } label: {
-                    Image(systemName: "sparkles")
+                    .disabled(aiViewModel.isLoading)
                 }
-                .disabled(aiViewModel.isLoading)
             }
         }
         .onAppear {
