@@ -9,6 +9,7 @@
 import SwiftUI
 
 struct SearchView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = SearchViewModel()
     @State private var searchText = ""
     @Environment(\.dismiss) private var dismiss
@@ -17,22 +18,65 @@ struct SearchView: View {
         NavigationStack {
             ZStack {
                 if viewModel.isSearching {
-                    ProgressView()
-                } else if searchText.isEmpty {
-                    // Empty state
+                    // AI search loading state
                     VStack(spacing: 16) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 60))
-                            .foregroundStyle(.gray.opacity(0.3))
+                        ProgressView()
+                            .scaleEffect(1.5)
                         
-                        Text("search messages")
-                            .font(.title2)
-                            .fontWeight(.semibold)
+                        HStack(spacing: 6) {
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(.purple)
+                            Text("ai searching messages...")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.purple)
+                        }
                         
-                        Text("find messages across all conversations")
-                            .font(.subheadline)
+                        Text("using semantic understanding to find relevant messages")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                } else if searchText.isEmpty {
+                    // Empty state with AI examples
+                    VStack(spacing: 20) {
+                        Image(systemName: "sparkles.rectangle.stack")
+                            .font(.system(size: 60))
+                            .foregroundStyle(.purple.opacity(0.3))
+                        
+                        VStack(spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "sparkles")
+                                    .foregroundStyle(.purple)
+                                Text("ai powered search")
+                                    .font(.title2)
+                                    .fontWeight(.semibold)
+                            }
+                            
+                            Text("search using natural language - no exact keywords needed")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("try queries like:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+                            
+                            VStack(alignment: .leading, spacing: 8) {
+                                ExampleQueryRow(text: "what did sarah say about the deadline")
+                                ExampleQueryRow(text: "when is the meeting scheduled")
+                                ExampleQueryRow(text: "who mentioned the budget")
+                                ExampleQueryRow(text: "messages about basketball")
+                            }
+                        }
+                        .padding()
+                        .background(Color.purple.opacity(0.05))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
                     }
                 } else if viewModel.aiSearchResults.isEmpty && viewModel.searchResults.isEmpty {
                     // No results
@@ -102,6 +146,11 @@ struct SearchView: View {
                 Task {
                     await viewModel.search(query: newValue)
                 }
+            }
+            .onAppear {
+                // Set current user ID for AI search
+                viewModel.currentUserId = authViewModel.currentUser?.id
+                print("🔍 SearchView appeared, user ID: \(authViewModel.currentUser?.id ?? "none")")
             }
         }
     }
@@ -204,7 +253,25 @@ struct AISearchResultRow: View {
     }
 }
 
+/// Example query row for empty state
+struct ExampleQueryRow: View {
+    let text: String
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "text.bubble")
+                .font(.caption)
+                .foregroundStyle(.purple.opacity(0.6))
+            
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
 #Preview {
     SearchView()
+        .environmentObject(AuthViewModel())
 }
 

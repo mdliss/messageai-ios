@@ -32,6 +32,7 @@ class SearchViewModel: ObservableObject {
     @Published var isSearching = false
     @Published var searchQuery = ""
     @Published var useAISearch = true  // Toggle between AI and keyword search
+    @Published var currentUserId: String?  // Track current user for conversation filtering
     
     private let coreDataService = CoreDataService.shared
     private let functions = Functions.functions()
@@ -49,9 +50,18 @@ class SearchViewModel: ObservableObject {
         
         isSearching = true
         searchQuery = query
+        searchResults = []
+        aiSearchResults = []
+        
+        print("🔍 ═══════════════════════════════════════")
+        print("🔍 SEARCH INITIATED")
+        print("🔍 Query: \"\(query)\"")
+        print("🔍 Mode: \(useAISearch ? "AI SEMANTIC SEARCH" : "KEYWORD SEARCH")")
+        print("🔍 User ID: \(currentUserId ?? "NOT SET")")
+        print("🔍 ═══════════════════════════════════════")
         
         if useAISearch {
-            // AI semantic search across all conversations
+            // AI semantic search across user's conversations
             await searchWithAI(query: query)
         } else {
             // Fallback: keyword search in Core Data
@@ -61,35 +71,60 @@ class SearchViewModel: ObservableObject {
         
         isSearching = false
         
-        print("🔍 Search completed: \(useAISearch ? aiSearchResults.count : searchResults.count) results for '\(query)'")
+        let resultCount = useAISearch ? aiSearchResults.count : searchResults.count
+        print("🔍 ═══════════════════════════════════════")
+        print("🔍 SEARCH COMPLETE")
+        print("🔍 Results found: \(resultCount)")
+        print("🔍 ═══════════════════════════════════════")
     }
     
     /// AI semantic search across conversations
     private func searchWithAI(query: String) async {
+        guard let userId = currentUserId else {
+            print("❌ No user ID set for search")
+            // Fallback to Core Data
+            let results = coreDataService.searchMessages(query: query)
+            searchResults = results
+            return
+        }
+        
         do {
-            // Get all user conversations
+            print("🔍 Starting AI semantic search for user: \(userId)")
+            print("   Query: \"\(query)\"")
+            
+            // Get ONLY current user's conversations
             let conversationsRef = FirebaseConfig.shared.db.collection("conversations")
+                .whereField("participantIds", arrayContains: userId)
             let snapshot = try await conversationsRef.getDocuments()
+            
+            print("📊 Found \(snapshot.documents.count) conversations to search")
             
             var allResults: [AISearchResult] = []
             
-            // Search each conversation (limit to first 5 for performance)
-            for (index, doc) in snapshot.documents.prefix(5).enumerated() {
+            // Search each conversation
+            for (index, doc) in snapshot.documents.enumerated() {
                 let conversationId = doc.documentID
                 
-                print("🔍 Searching conversation \(index + 1): \(conversationId)")
+                print("🔍 [AI Search] Conversation \(index + 1)/\(snapshot.documents.count): \(conversationId)")
                 
                 do {
+                    print("   📡 Calling searchMessages Cloud Function...")
+                    
                     let result = try await functions.httpsCallable("searchMessages").call([
                         "conversationId": conversationId,
                         "query": query,
                         "limit": 5
                     ])
                     
+                    print("   ✅ Cloud Function returned")
+                    
                     guard let data = result.data as? [String: Any],
                           let resultsData = data["results"] as? [[String: Any]] else {
+                        print("   ⚠️ Invalid response format from Cloud Function")
                         continue
                     }
+                    
+                    print("   📊 Got \(resultsData.count) results from this conversation")
                     
                     // Parse results
                     let conversationResults = resultsData.compactMap { resultDict -> AISearchResult? in
