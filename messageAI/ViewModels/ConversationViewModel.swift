@@ -31,12 +31,8 @@ class ConversationViewModel: ObservableObject {
     func loadConversations(userId: String) {
         isLoading = true
         
-        // Load from Core Data first (fast)
-        let cachedConversations = coreDataService.fetchConversations()
-        if !cachedConversations.isEmpty {
-            conversations = cachedConversations
-            isLoading = false
-        }
+        // Don't show cached conversations immediately to avoid flash
+        // Core Data will be used as backup if Firestore fails
         
         // Subscribe to Firestore for real-time updates
         conversationTask = Task {

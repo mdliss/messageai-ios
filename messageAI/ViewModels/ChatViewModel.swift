@@ -50,12 +50,8 @@ class ChatViewModel: ObservableObject {
         
         isLoading = true
         
-        // Load from Core Data first (fast initial load)
-        let cachedMessages = coreDataService.fetchMessages(conversationId: conversationId)
-        if !cachedMessages.isEmpty {
-            messages = cachedMessages
-            isLoading = false
-        }
+        // Don't show cached messages immediately to avoid flash
+        // Core Data will be used as backup if Firestore fails
         
         // Subscribe to Firestore for real-time updates (only recent 50 messages)
         messageTask = Task {

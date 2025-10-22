@@ -22,8 +22,10 @@ struct messageAIApp: App {
                     await NotificationService.shared.requestPermission()
                     await NotificationService.shared.getFCMToken()
                     
-                    // Clear ALL unsynced messages from previous test sessions
-                    CoreDataService.shared.clearAllUnsyncedMessages()
+                    // Clear ALL Core Data for clean testing (prevents flash of old messages)
+                    print("🧹 Clearing all Core Data for fresh start...")
+                    CoreDataService.shared.clearAllMessages()
+                    CoreDataService.shared.clearAllConversations()
                     
                     // Update sync service pending count
                     SyncService.shared.updatePendingCount()

@@ -231,6 +231,42 @@ class CoreDataService {
         }
     }
     
+    /// Clear ALL messages from Core Data (for testing/debugging)
+    func clearAllMessages() {
+        let fetchRequest = NSFetchRequest<MessageEntity>(entityName: "MessageEntity")
+        
+        do {
+            let allMessages = try viewContext.fetch(fetchRequest)
+            
+            for entity in allMessages {
+                viewContext.delete(entity)
+            }
+            
+            try viewContext.save()
+            print("✅ Cleared ALL \(allMessages.count) messages from Core Data")
+        } catch {
+            print("❌ Failed to clear all messages: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Clear ALL conversations from Core Data (for testing/debugging)
+    func clearAllConversations() {
+        let fetchRequest = NSFetchRequest<ConversationEntity>(entityName: "ConversationEntity")
+        
+        do {
+            let allConversations = try viewContext.fetch(fetchRequest)
+            
+            for entity in allConversations {
+                viewContext.delete(entity)
+            }
+            
+            try viewContext.save()
+            print("✅ Cleared ALL \(allConversations.count) conversations from Core Data")
+        } catch {
+            print("❌ Failed to clear all conversations: \(error.localizedDescription)")
+        }
+    }
+    
     // MARK: - Conversation Operations
     
     /// Save conversation to Core Data
