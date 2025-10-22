@@ -67,6 +67,18 @@ class ChatViewModel: ObservableObject {
                     self.coreDataService.saveMessage(message)
                 }
                 
+                // Clean up Core Data: delete messages that no longer exist in Firestore
+                let firestoreMessageIds = Set(fetchedMessages.map { $0.id })
+                let coreDataMessages = self.coreDataService.fetchMessages(conversationId: conversationId)
+                
+                for coreDataMessage in coreDataMessages {
+                    // If message exists in Core Data but not in Firestore, delete it
+                    if !firestoreMessageIds.contains(coreDataMessage.id) {
+                        print("🗑️ Deleting orphaned message from Core Data: \(coreDataMessage.id)")
+                        self.coreDataService.deleteMessage(messageId: coreDataMessage.id)
+                    }
+                }
+                
                 // Update conversation's last message
                 if let lastMessage = fetchedMessages.last {
                     self.updateConversationLastMessage(lastMessage)

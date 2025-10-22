@@ -178,10 +178,14 @@ struct ConversationListView: View {
         guard let currentUser = authViewModel.currentUser else { return }
         
         do {
+            // Check if conversation exists, create if not
+            // This happens immediately (like WhatsApp) for simplicity
             let conversation = try await viewModel.createConversation(
                 currentUserId: currentUser.id,
                 otherUserId: otherUser.id
             )
+            
+            print("✅ Conversation ready: \(conversation.id)")
             
             // Dismiss picker and navigate to chat
             showUserPicker = false

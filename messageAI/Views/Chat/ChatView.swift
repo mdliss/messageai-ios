@@ -279,6 +279,9 @@ struct ChatView: View {
                 senderPhotoURL: participant?.photoURL
             )
         }
+        
+        // Clear input immediately for better UX
+        messageText = ""
     }
     
     // MARK: - Send Image

@@ -155,4 +155,3 @@ struct LastMessage: Codable, Equatable, Hashable {
         ]
     }
 }
-
