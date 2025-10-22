@@ -30,6 +30,7 @@ class ChatViewModel: ObservableObject {
     private let realtimeDBService = RealtimeDBService.shared
     private let syncService = SyncService.shared
     private let networkMonitor = NetworkMonitor.shared
+    private let notificationService = NotificationService.shared
     private var messageTask: Task<Void, Never>?
     private var typingTask: Task<Void, Never>?
     private var typingTimer: Timer?
@@ -37,6 +38,7 @@ class ChatViewModel: ObservableObject {
     
     private var conversationId: String?
     private var currentUserId: String?
+    private var lastMessageCount = 0
     
     // MARK: - Load Messages
     
@@ -60,6 +62,10 @@ class ChatViewModel: ObservableObject {
         // Subscribe to Firestore for real-time updates (only recent 50 messages)
         messageTask = Task {
             for await fetchedMessages in firestoreService.subscribeToMessages(conversationId: conversationId, limit: 50) {
+                // Detect new messages for notifications
+                let previousCount = self.lastMessageCount
+                let newMessageCount = fetchedMessages.count
+                
                 self.messages = fetchedMessages
                 self.isLoading = false
                 
@@ -75,6 +81,27 @@ class ChatViewModel: ObservableObject {
                 if let lastMessage = fetchedMessages.last {
                     self.updateConversationLastMessage(lastMessage)
                 }
+                
+                // Trigger notification for new messages from other users
+                if newMessageCount > previousCount && previousCount > 0 {
+                    // Get the new messages (messages that weren't there before)
+                    let newMessages = Array(fetchedMessages.suffix(newMessageCount - previousCount))
+                    
+                    for message in newMessages {
+                        // Only notify for messages from other users
+                        if message.senderId != currentUserId {
+                            print("🔔 New message from other user, triggering notification")
+                            await self.notificationService.scheduleLocalNotification(
+                                title: message.senderName,
+                                body: message.previewText,
+                                conversationId: conversationId
+                            )
+                        }
+                    }
+                }
+                
+                // Update message count for next comparison
+                self.lastMessageCount = newMessageCount
                 
                 // Mark messages as read
                 await self.markMessagesAsRead(fetchedMessages, currentUserId: currentUserId)
@@ -539,6 +566,7 @@ class ChatViewModel: ObservableObject {
         currentUserId = nil
         messages = []
         typingUsers = []
+        lastMessageCount = 0
     }
     
     deinit {

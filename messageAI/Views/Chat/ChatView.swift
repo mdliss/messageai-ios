@@ -268,6 +268,9 @@ struct ChatView: View {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         
+        // Clear input immediately (optimistic UI)
+        messageText = ""
+        
         // Get current user info from conversation
         let participant = conversation.participantDetails[currentUserId]
         
