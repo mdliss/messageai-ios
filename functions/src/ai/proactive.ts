@@ -8,6 +8,7 @@ import OpenAI from 'openai';
 
 interface Message {
   id: string;
+  senderId: string;
   senderName: string;
   text: string;
   type: 'text' | 'image';
@@ -168,6 +169,7 @@ ${transcript}`,
             action: 'scheduling_help',
             confidence: confidence / 100,
             suggestedTimes: suggestedTimes || null,
+            targetUserId: message.senderId,
           },
           messageIds: [message.id],
           triggeredBy: 'system',

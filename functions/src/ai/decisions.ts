@@ -46,6 +46,12 @@ export const detectDecision = functions
       "final decision",
       "confirmed",
       "settling on",
+      "option 1",
+      "option 2",
+      "option 3",
+      "works for me",
+      "that works",
+      "sounds good",
     ];
     
     const hasDecisionKeyword = decisionKeywords.some(keyword => 
@@ -56,7 +62,30 @@ export const detectDecision = functions
       return;
     }
     
-    console.log(`📋 Decision detected in message: ${message.id}`);
+    console.log(`📋 Decision keyword detected in message: ${message.id}`);
+    
+    // Check if this is a response to scheduling assistant
+    const messagesRef = admin.firestore()
+      .collection('conversations')
+      .doc(conversationId)
+      .collection('messages')
+      .orderBy('createdAt', 'desc')
+      .limit(10);
+    
+    const messagesSnapshot = await messagesRef.get();
+    const recentMessages = messagesSnapshot.docs.map(doc => doc.data() as Message);
+    
+    // Look for scheduling assistant message in recent history
+    const hasSchedulingAssistant = recentMessages.some(msg => 
+      msg.senderId === 'ai_assistant' && 
+      msg.text.includes('scheduling assistant')
+    );
+    
+    // If responding to scheduling assistant, treat as meeting time decision
+    const isSchedulingDecision = hasSchedulingAssistant && 
+      (text.includes('option') || text.includes('works for me') || text.includes('that works'));
+    
+    console.log(`📋 Decision detected in message: ${message.id}, isSchedulingDecision: ${isSchedulingDecision}`);
     
     try {
       const apiKey = functions.config().openai?.key;
@@ -66,20 +95,10 @@ export const detectDecision = functions
         return;
       }
       
-      // Fetch recent messages for context
-      const messagesRef = admin.firestore()
-        .collection('conversations')
-        .doc(conversationId)
-        .collection('messages')
-        .orderBy('createdAt', 'desc')
-        .limit(20);
+      // Fetch all recent messages for full context (already fetched above, reuse)
+      const allRecentMessages = recentMessages.reverse();
       
-      const messagesSnapshot = await messagesRef.get();
-      const recentMessages = messagesSnapshot.docs
-        .map(doc => doc.data() as Message)
-        .reverse();
-      
-      const transcript = recentMessages.map(msg => 
+      const transcript = allRecentMessages.map(msg => 
         `${msg.senderName}: ${msg.text}`
       ).join('\n');
       
@@ -88,23 +107,38 @@ export const detectDecision = functions
         apiKey: apiKey,
       });
       
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        max_tokens: 200,
-        temperature: 0.7,
-        messages: [{
-          role: 'system',
-          content: 'You are an intelligent assistant helping remote teams track important decisions that often get buried in chat history. Extract clear, specific decisions so teams never have to search through hundreds of messages. Never use hyphens.',
-        }, {
-          role: 'user',
-          content: `Extract the key decision from this remote team conversation. Be concise and specific about what was decided and any relevant context.
+      const systemPrompt = isSchedulingDecision 
+        ? 'You are an intelligent assistant helping remote teams track meeting time decisions. When someone selects a meeting time option, extract and format it as a clear decision. Never use hyphens.'
+        : 'You are an intelligent assistant helping remote teams track important decisions that often get buried in chat history. Extract clear, specific decisions so teams never have to search through hundreds of messages. Never use hyphens.';
+      
+      const userPrompt = isSchedulingDecision
+        ? `Extract the meeting time decision from this conversation. Someone has selected a meeting time option. Format the decision clearly with the chosen time.
+
+Format as: "Meeting scheduled for [specific time with all time zones mentioned]"
+
+Never use hyphens.
+
+Conversation:
+${transcript}`
+        : `Extract the key decision from this remote team conversation. Be concise and specific about what was decided and any relevant context.
 
 Format as a clear statement without the word "Decision:" prefix. Just state what was decided.
 
 Never use hyphens.
 
 Conversation:
-${transcript}`,
+${transcript}`;
+      
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        max_tokens: 200,
+        temperature: 0.7,
+        messages: [{
+          role: 'system',
+          content: systemPrompt,
+        }, {
+          role: 'user',
+          content: userPrompt,
         }],
       });
       

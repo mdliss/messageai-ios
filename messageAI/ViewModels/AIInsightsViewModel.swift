@@ -27,8 +27,10 @@ class AIInsightsViewModel: ObservableObject {
     // MARK: - Subscribe to Insights
     
     /// Subscribe to insights for a conversation
-    /// - Parameter conversationId: Conversation ID
-    func subscribeToInsights(conversationId: String) {
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - currentUserId: Current user ID to filter targeted suggestions
+    func subscribeToInsights(conversationId: String, currentUserId: String) {
         let insightsRef = db.collection("conversations")
             .document(conversationId)
             .collection("insights")
@@ -53,11 +55,19 @@ class AIInsightsViewModel: ObservableObject {
                 
                 let fetchedInsights = documents.compactMap { document -> AIInsight? in
                     try? document.data(as: AIInsight.self)
+                }.filter { insight in
+                    // Show all insights except suggestions targeted at other users
+                    if insight.type == .suggestion,
+                       let targetUserId = insight.metadata?.targetUserId,
+                       targetUserId != currentUserId {
+                        return false
+                    }
+                    return true
                 }
                 
                 Task { @MainActor in
                     self.insights = fetchedInsights
-                    print("✅ Fetched \(fetchedInsights.count) insights")
+                    print("✅ Fetched \(fetchedInsights.count) insights (filtered for user \(currentUserId))")
                 }
             }
             
@@ -138,7 +148,7 @@ class AIInsightsViewModel: ObservableObject {
     
     // MARK: - Accept Scheduling Suggestion
     
-    /// Accept scheduling suggestion and post suggested times as AI assistant message
+    /// Accept scheduling suggestion and create voting poll in decisions
     /// - Parameters:
     ///   - insight: The scheduling suggestion insight
     ///   - conversationId: Conversation ID
@@ -149,22 +159,59 @@ class AIInsightsViewModel: ObservableObject {
             // Extract suggested times from insight metadata or content
             let suggestedTimes = insight.metadata?.suggestedTimes ?? extractTimesFromContent(insight.content)
             
-            // Create AI assistant message with suggested times
-            let assistantMessage = """
-            🤖 scheduling assistant
+            // Parse individual time options
+            let timeOptions = parseTimeOptions(from: suggestedTimes)
             
-            based on the conversation, here are some suggested meeting times:
+            // Create voting poll as a decision insight
+            let pollRef = db.collection("conversations")
+                .document(conversationId)
+                .collection("insights")
+                .document()
+            
+            let pollContent = """
+            📊 meeting time poll
+            
+            vote for your preferred time:
             
             \(suggestedTimes)
-            
-            please let me know which time works best for everyone, or if you need different options.
             """
             
-            // Post as a system message (AI assistant)
+            let pollInsight: [String: Any] = [
+                "id": pollRef.documentID,
+                "conversationId": conversationId,
+                "type": "decision",
+                "content": pollContent,
+                "metadata": [
+                    "action": "meeting_poll",
+                    "suggestedTimes": suggestedTimes,
+                    "timeOptions": timeOptions,
+                    "votes": [:],
+                    "createdBy": currentUserId,
+                    "isPoll": true
+                ],
+                "messageIds": insight.messageIds,
+                "triggeredBy": currentUserId,
+                "createdAt": FieldValue.serverTimestamp(),
+                "dismissed": false
+            ]
+            
+            try await pollRef.setData(pollInsight)
+            
+            // Also post AI assistant message in chat for visibility
             let messageRef = db.collection("conversations")
                 .document(conversationId)
                 .collection("messages")
                 .document()
+            
+            let assistantMessage = """
+            🤖 scheduling assistant
+            
+            i've created a poll in the decisions tab where everyone can vote for their preferred meeting time:
+            
+            \(suggestedTimes)
+            
+            check the decisions tab at the bottom to cast your vote!
+            """
             
             let message: [String: Any] = [
                 "id": messageRef.documentID,
@@ -189,11 +236,23 @@ class AIInsightsViewModel: ObservableObject {
             // Dismiss the suggestion insight
             await dismissInsight(insightId: insight.id, conversationId: conversationId)
             
-            print("✅ Scheduling suggestion accepted and posted as AI assistant message")
+            print("✅ Meeting poll created in decisions tab")
             
         } catch {
             errorMessage = "Failed to accept suggestion: \(error.localizedDescription)"
             print("❌ Failed to accept suggestion: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Parse time options from suggested times text
+    private func parseTimeOptions(from timesText: String) -> [String] {
+        let lines = timesText.split(separator: "\n")
+        return lines.compactMap { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.starts(with: "•") || trimmed.starts(with: "-") || trimmed.lowercased().contains("option") {
+                return String(trimmed)
+            }
+            return nil
         }
     }
     
@@ -215,6 +274,34 @@ class AIInsightsViewModel: ObservableObject {
         • thursday 10am EST / 7am PST / 3pm GMT
         • friday 3pm EST / 12pm PST / 8pm GMT
         """
+    }
+    
+    // MARK: - Vote on Meeting Poll
+    
+    /// Cast vote on meeting time poll
+    /// - Parameters:
+    ///   - insightId: Poll insight ID
+    ///   - conversationId: Conversation ID
+    ///   - userId: User ID voting
+    ///   - optionIndex: Index of selected option (0, 1, or 2)
+    func voteOnPoll(insightId: String, conversationId: String, userId: String, optionIndex: Int) async {
+        do {
+            let insightRef = db.collection("conversations")
+                .document(conversationId)
+                .collection("insights")
+                .document(insightId)
+            
+            // Update votes in metadata
+            try await insightRef.updateData([
+                "metadata.votes.\(userId)": "option_\(optionIndex + 1)"
+            ])
+            
+            print("✅ Vote recorded: User \(userId) voted for option \(optionIndex + 1)")
+            
+        } catch {
+            errorMessage = "Failed to vote: \(error.localizedDescription)"
+            print("❌ Failed to vote: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Dismiss Insight

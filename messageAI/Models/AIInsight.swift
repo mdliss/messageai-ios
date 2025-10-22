@@ -123,19 +123,34 @@ struct InsightMetadata: Codable, Equatable {
     var action: String?
     var confidence: Double?
     var suggestedTimes: String?
+    var targetUserId: String?
+    var votes: [String: String]?
+    var isPoll: Bool?
+    var timeOptions: [String]?
+    var createdBy: String?
     
     init(bulletPoints: Int? = nil,
          messageCount: Int? = nil,
          approvedBy: [String]? = nil,
          action: String? = nil,
          confidence: Double? = nil,
-         suggestedTimes: String? = nil) {
+         suggestedTimes: String? = nil,
+         targetUserId: String? = nil,
+         votes: [String: String]? = nil,
+         isPoll: Bool? = nil,
+         timeOptions: [String]? = nil,
+         createdBy: String? = nil) {
         self.bulletPoints = bulletPoints
         self.messageCount = messageCount
         self.approvedBy = approvedBy
         self.action = action
         self.confidence = confidence
         self.suggestedTimes = suggestedTimes
+        self.targetUserId = targetUserId
+        self.votes = votes
+        self.isPoll = isPoll
+        self.timeOptions = timeOptions
+        self.createdBy = createdBy
     }
     
     func toDictionary() -> [String: Any] {
@@ -158,6 +173,21 @@ struct InsightMetadata: Codable, Equatable {
         }
         if let suggestedTimes = suggestedTimes {
             dict["suggestedTimes"] = suggestedTimes
+        }
+        if let targetUserId = targetUserId {
+            dict["targetUserId"] = targetUserId
+        }
+        if let votes = votes {
+            dict["votes"] = votes
+        }
+        if let isPoll = isPoll {
+            dict["isPoll"] = isPoll
+        }
+        if let timeOptions = timeOptions {
+            dict["timeOptions"] = timeOptions
+        }
+        if let createdBy = createdBy {
+            dict["createdBy"] = createdBy
         }
         
         return dict

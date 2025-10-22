@@ -23,13 +23,14 @@ struct ChatView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Network status banner
-            NetworkBanner()
-            
-            // Messages list
-            ScrollViewReader { proxy in
-                List {
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                // Network status banner
+                NetworkBanner()
+                
+                // Messages list
+                ScrollViewReader { proxy in
+                    List {
                     // Load older messages indicator
                     if viewModel.hasMoreMessages {
                         HStack {
@@ -64,29 +65,6 @@ struct ChatView: View {
                         ProgressView()
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
-                    }
-                    
-                    // AI Insights
-                    ForEach(aiViewModel.insights) { insight in
-                        let isSchedulingSuggestion = insight.type == .suggestion
-                        
-                        AIInsightCardView(
-                            insight: insight,
-                            onDismiss: {
-                                Task {
-                                    await aiViewModel.dismissInsight(
-                                        insightId: insight.id,
-                                        conversationId: conversation.id
-                                    )
-                                }
-                            },
-                            onAcceptSuggestion: isSchedulingSuggestion ? {
-                                handleAcceptSuggestion(insight)
-                            } : nil
-                        )
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                     }
                     
                     // Messages
@@ -173,6 +151,32 @@ struct ChatView: View {
             .onChange(of: messageText) { _, newValue in
                 viewModel.handleTextChange(newValue, currentUserId: currentUserId)
             }
+            }
+            
+            // Floating AI Insights Overlay (bottom)
+            VStack(spacing: 8) {
+                ForEach(aiViewModel.insights) { insight in
+                    let isSchedulingSuggestion = insight.type == .suggestion
+                    
+                    AIInsightCardView(
+                        insight: insight,
+                        onDismiss: {
+                            Task {
+                                await aiViewModel.dismissInsight(
+                                    insightId: insight.id,
+                                    conversationId: conversation.id
+                                )
+                            }
+                        },
+                        onAcceptSuggestion: isSchedulingSuggestion ? {
+                            handleAcceptSuggestion(insight)
+                        } : nil
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .padding(.bottom, 60)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: aiViewModel.insights.count)
         }
         .navigationTitle(conversation.displayName(for: currentUserId))
         .navigationBarTitleDisplayMode(.inline)
@@ -232,7 +236,7 @@ struct ChatView: View {
                 conversationId: conversation.id,
                 currentUserId: currentUserId
             )
-            aiViewModel.subscribeToInsights(conversationId: conversation.id)
+            aiViewModel.subscribeToInsights(conversationId: conversation.id, currentUserId: currentUserId)
         }
         .onDisappear {
             // Clear current conversation from app state

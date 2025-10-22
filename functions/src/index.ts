@@ -19,6 +19,7 @@ export { extractActionItems } from './ai/actionItems';
 export { detectPriority } from './ai/priority';
 export { detectDecision } from './ai/decisions';
 export { detectProactiveSuggestions } from './ai/proactive';
+export { confirmSchedulingSelection } from './ai/schedulingConfirmation';
 
 console.log('✅ MessageAI Cloud Functions initialized');
 
