@@ -69,7 +69,8 @@ struct AIAssistantView: View {
                                     Task {
                                         await aiViewModel.dismissInsight(
                                             insightId: insight.id,
-                                            conversationId: insight.conversationId
+                                            conversationId: insight.conversationId,
+                                            currentUserId: authViewModel.currentUser?.id ?? ""
                                         )
                                     }
                                 }

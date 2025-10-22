@@ -329,7 +329,7 @@ class AIInsightsViewModel: ObservableObject {
             try await messageRef.setData(message)
             
             // Dismiss the suggestion insight
-            await dismissInsight(insightId: insight.id, conversationId: conversationId)
+            await dismissInsight(insightId: insight.id, conversationId: conversationId, currentUserId: currentUserId)
             
             print("✅ Meeting poll created in decisions tab")
             
