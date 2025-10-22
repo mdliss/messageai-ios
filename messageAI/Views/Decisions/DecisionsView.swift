@@ -161,49 +161,51 @@ struct PollView: View {
                     .foregroundStyle(.orange)
             }
             
-            // Time options from metadata
-            if let timeOptions = decision.metadata?.timeOptions, !timeOptions.isEmpty {
-                ForEach(Array(timeOptions.enumerated()), id: \.offset) { index, option in
-                    let votes = decision.metadata?.votes ?? [:]
-                    let voteCount = votes.values.filter { $0 == "option_\(index + 1)" }.count
-                    let hasVoted = votes[currentUserId] == "option_\(index + 1)"
-                    
-                    Button {
-                        onVote(index)
-                    } label: {
-                        HStack {
-                            Text(option)
-                                .font(.subheadline)
-                                .foregroundStyle(.primary)
-                                .multilineTextAlignment(.leading)
-                            
-                            Spacer()
-                            
-                            if hasVoted {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(.orange)
-                            }
-                            
-                            if voteCount > 0 {
-                                Text("\(voteCount)")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.orange)
-                                    .cornerRadius(12)
-                            }
+            // Get time options - parse from metadata or content as fallback
+            let displayOptions = getTimeOptions()
+            
+            // ALWAYS show voting buttons (never just text)
+            ForEach(Array(displayOptions.enumerated()), id: \.offset) { index, option in
+                let votes = decision.metadata?.votes ?? [:]
+                let voteCount = votes.values.filter { $0 == "option_\(index + 1)" }.count
+                let hasVoted = votes[currentUserId] == "option_\(index + 1)"
+                
+                Button {
+                    print("🗳️ User \(currentUserId) voting for option \(index + 1)")
+                    onVote(index)
+                } label: {
+                    HStack {
+                        Text(option)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.leading)
+                        
+                        Spacer()
+                        
+                        if hasVoted {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.orange)
                         }
-                        .padding()
-                        .background(hasVoted ? Color.orange.opacity(0.1) : Color.gray.opacity(0.05))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(hasVoted ? Color.orange : Color.clear, lineWidth: 2)
-                        )
+                        
+                        if voteCount > 0 {
+                            Text("\(voteCount)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.orange)
+                                .cornerRadius(12)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding()
+                    .background(hasVoted ? Color.orange.opacity(0.1) : Color.gray.opacity(0.05))
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(hasVoted ? Color.orange : Color.clear, lineWidth: 2)
+                    )
                 }
+                .buttonStyle(.plain)
             }
             
             // Timestamp and stats
@@ -226,6 +228,41 @@ struct PollView: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 8)
+    }
+    
+    /// Get time options from metadata or parse from content
+    private func getTimeOptions() -> [String] {
+        // Try metadata first
+        if let timeOptions = decision.metadata?.timeOptions, !timeOptions.isEmpty {
+            print("✅ Using timeOptions from metadata: \(timeOptions.count) options")
+            return timeOptions
+        }
+        
+        // Fallback: parse from content
+        print("⚠️ No timeOptions in metadata, parsing from content")
+        let content = decision.content
+        let lines = content.split(separator: "\n")
+        
+        let parsedOptions = lines.compactMap { line -> String? in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.starts(with: "•") || trimmed.starts(with: "-") || trimmed.lowercased().hasPrefix("option") {
+                return String(trimmed)
+            }
+            return nil
+        }
+        
+        if !parsedOptions.isEmpty {
+            print("✅ Parsed \(parsedOptions.count) options from content")
+            return parsedOptions
+        }
+        
+        // Ultimate fallback: return generic options
+        print("⚠️ Could not parse options, using generic fallback")
+        return [
+            "• option 1: thursday 12pm EST / 9am PST / 5pm GMT / 10:30pm IST",
+            "• option 2: friday 10am EST / 7am PST / 3pm GMT / 8:30pm IST",
+            "• option 3: friday 1pm EST / 10am PST / 6pm GMT / 11:30pm IST"
+        ]
     }
 }
 

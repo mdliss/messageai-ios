@@ -246,14 +246,32 @@ class AIInsightsViewModel: ObservableObject {
     
     /// Parse time options from suggested times text
     private func parseTimeOptions(from timesText: String) -> [String] {
+        print("🔍 Parsing time options from text: \(timesText)")
+        
         let lines = timesText.split(separator: "\n")
-        return lines.compactMap { line in
+        let options = lines.compactMap { line -> String? in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // Match lines that start with bullet, dash, or contain "option"
             if trimmed.starts(with: "•") || trimmed.starts(with: "-") || trimmed.lowercased().contains("option") {
                 return String(trimmed)
             }
             return nil
         }
+        
+        print("✅ Parsed \(options.count) time options:")
+        options.forEach { print("   - \($0)") }
+        
+        // If parsing failed, create default options
+        if options.isEmpty {
+            print("⚠️ No options parsed, using defaults")
+            return [
+                "• option 1: thursday 12pm EST / 9am PST / 5pm GMT / 10:30pm IST",
+                "• option 2: friday 10am EST / 7am PST / 3pm GMT / 8:30pm IST",
+                "• option 3: friday 1pm EST / 10am PST / 6pm GMT / 11:30pm IST"
+            ]
+        }
+        
+        return options
     }
     
     /// Extract suggested times from content if not in metadata

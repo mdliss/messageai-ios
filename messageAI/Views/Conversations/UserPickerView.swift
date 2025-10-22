@@ -17,8 +17,10 @@ struct UserPickerView: View {
     @State private var isLoading = false
     @State private var searchText = ""
     @State private var errorMessage: String?
+    @State private var onlineStatuses: [String: Bool] = [:]
     
     private let firestoreService = FirestoreService.shared
+    private let realtimeDBService = RealtimeDBService.shared
     
     var body: some View {
         NavigationStack {
@@ -80,8 +82,8 @@ struct UserPickerView: View {
                                 
                                 Spacer()
                                 
-                                // Online indicator
-                                if user.isOnline {
+                                // Online indicator (from real-time presence)
+                                if onlineStatuses[user.id] == true {
                                     Circle()
                                         .fill(Color.green)
                                         .frame(width: 10, height: 10)
@@ -105,6 +107,10 @@ struct UserPickerView: View {
             .searchable(text: $searchText, prompt: "search users")
             .onAppear {
                 loadUsers()
+            }
+            .onChange(of: users) { _, newUsers in
+                // Start observing presence for all users
+                observePresenceForUsers(newUsers)
             }
             .alert("error", isPresented: .constant(errorMessage != nil)) {
                 Button("ok") {
@@ -141,9 +147,28 @@ struct UserPickerView: View {
                 let fetchedUsers = try await firestoreService.getAllUsers()
                 users = fetchedUsers
                 isLoading = false
+                
+                print("✅ Loaded \(fetchedUsers.count) users")
             } catch {
                 errorMessage = "Failed to load users: \(error.localizedDescription)"
                 isLoading = false
+            }
+        }
+    }
+    
+    // MARK: - Observe Presence
+    
+    private func observePresenceForUsers(_ users: [User]) {
+        print("👀 Starting presence observation for \(users.count) users")
+        
+        for user in users {
+            Task {
+                for await isOnline in realtimeDBService.observePresence(userId: user.id) {
+                    await MainActor.run {
+                        onlineStatuses[user.id] = isOnline
+                        print("📍 Updated presence for \(user.displayName): \(isOnline ? "ONLINE" : "OFFLINE")")
+                    }
+                }
             }
         }
     }
