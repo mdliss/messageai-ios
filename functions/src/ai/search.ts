@@ -69,6 +69,8 @@ export const searchMessages = functions
         apiKey: apiKey,
       });
       
+      console.log(`📡 Fetching messages from conversation: ${conversationId}`);
+      
       // Fetch messages from conversation (last 500 for search scope)
       const messagesRef = admin.firestore()
         .collection('conversations')
@@ -78,9 +80,14 @@ export const searchMessages = functions
         .orderBy('createdAt', 'desc')
         .limit(500);
       
+      console.log(`📡 Query: conversations/${conversationId}/messages where type==text orderBy createdAt desc limit 500`);
+      
       const messagesSnapshot = await messagesRef.get();
       
+      console.log(`📊 Query returned ${messagesSnapshot.docs.length} documents`);
+      
       if (messagesSnapshot.empty) {
+        console.log(`ℹ️ No messages found in conversation ${conversationId}`);
         return {
           success: true,
           results: [],
@@ -91,6 +98,10 @@ export const searchMessages = functions
       const messages = messagesSnapshot.docs.map(doc => doc.data() as Message);
       
       console.log(`📊 Searching through ${messages.length} messages`);
+      console.log(`📝 Sample messages:`)
+      messages.slice(0, 3).forEach((msg, idx) => {
+        console.log(`   [${idx}] ${msg.senderName}: ${msg.text.substring(0, 50)}...`);
+      });
       
       // Hybrid approach: keyword matching + AI semantic understanding
       const queryLower = query.toLowerCase();
