@@ -43,15 +43,20 @@ class SearchViewModel: ObservableObject {
     /// - Parameter query: Search query
     func search(query: String) async {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            searchResults = []
-            aiSearchResults = []
+            // Clear results immediately when query is empty
+            await MainActor.run {
+                searchResults = []
+                aiSearchResults = []
+            }
             return
         }
         
-        isSearching = true
-        searchQuery = query
-        searchResults = []
-        aiSearchResults = []
+        // Set loading state and CLEAR old results immediately
+        await MainActor.run {
+            isSearching = true
+            searchResults = []
+            aiSearchResults = []
+        }
         
         print("🔍 ═══════════════════════════════════════")
         print("🔍 SEARCH INITIATED")
@@ -66,10 +71,14 @@ class SearchViewModel: ObservableObject {
         } else {
             // Fallback: keyword search in Core Data
             let results = coreDataService.searchMessages(query: query)
-            searchResults = results
+            await MainActor.run {
+                searchResults = results
+            }
         }
         
-        isSearching = false
+        await MainActor.run {
+            isSearching = false
+        }
         
         let resultCount = useAISearch ? aiSearchResults.count : searchResults.count
         print("🔍 ═══════════════════════════════════════")
@@ -160,8 +169,10 @@ class SearchViewModel: ObservableObject {
                 }
             }
             
-            // Sort by relevance score
-            aiSearchResults = allResults.sorted { $0.score > $1.score }
+            // Sort by relevance score and update on main actor
+            await MainActor.run {
+                aiSearchResults = allResults.sorted { $0.score > $1.score }
+            }
             
             print("✅ AI search complete: \(allResults.count) total results")
             
@@ -169,7 +180,9 @@ class SearchViewModel: ObservableObject {
             print("❌ AI search failed: \(error.localizedDescription)")
             // Fallback to Core Data search
             let results = coreDataService.searchMessages(query: query)
-            searchResults = results
+            await MainActor.run {
+                searchResults = results
+            }
         }
     }
     

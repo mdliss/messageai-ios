@@ -13,6 +13,8 @@ struct SearchView: View {
     @StateObject private var viewModel = SearchViewModel()
     @State private var searchText = ""
     @State private var debounceTask: Task<Void, Never>?
+    @State private var selectedConversation: (conversationId: String, messageId: String)?
+    @State private var navigateToConversation: Conversation?
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -102,7 +104,12 @@ struct SearchView: View {
                             // AI Search Results
                             Section {
                                 ForEach(viewModel.aiSearchResults) { result in
-                                    AISearchResultRow(result: result)
+                                    Button {
+                                        handleSelectResult(result)
+                                    } label: {
+                                        AISearchResultRow(result: result)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             } header: {
                                 HStack {
@@ -173,6 +180,34 @@ struct SearchView: View {
             }
             .onDisappear {
                 debounceTask?.cancel()
+            }
+            .navigationDestination(item: $navigateToConversation) { conversation in
+                if let currentUserId = authViewModel.currentUser?.id {
+                    ChatView(
+                        conversation: conversation,
+                        currentUserId: currentUserId
+                    )
+                }
+            }
+        }
+    }
+    
+    // MARK: - Handle Result Selection
+    
+    private func handleSelectResult(_ result: AISearchResult) {
+        print("🔍 User tapped result for conversation: \(result.conversationId)")
+        
+        Task {
+            do {
+                // Fetch the conversation details
+                let conversation = try await FirestoreService.shared.getConversation(result.conversationId)
+                
+                await MainActor.run {
+                    navigateToConversation = conversation
+                    print("✅ Navigating to conversation: \(conversation.displayName(for: authViewModel.currentUser?.id ?? ""))")
+                }
+            } catch {
+                print("❌ Failed to fetch conversation: \(error.localizedDescription)")
             }
         }
     }
