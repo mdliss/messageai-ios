@@ -27,6 +27,14 @@ class DecisionsViewModel: ObservableObject {
     /// Load all decisions across conversations (polls and team decisions)
     /// - Parameter userId: Current user ID
     func loadDecisions(userId: String) {
+        print("🔄 loadDecisions called for user: \(userId)")
+        print("📊 Current listeners count: \(listeners.count)")
+        print("📊 Current decisions count: \(decisions.count)")
+        
+        // CRITICAL FIX: Clean up existing listeners before creating new ones
+        // This prevents duplicate listeners when navigating back to Decisions tab
+        cleanup()
+        
         isLoading = true
         
         decisionsTask = Task {
@@ -37,16 +45,23 @@ class DecisionsViewModel: ObservableObject {
             do {
                 let conversationsSnapshot = try await conversationsRef.getDocuments()
                 
+                print("✅ Found \(conversationsSnapshot.documents.count) conversations for user")
+                
                 // Set up real-time listeners for each conversation's insights
                 for conversationDoc in conversationsSnapshot.documents {
                     let conversationData = conversationDoc.data()
                     let conversationType = conversationData["type"] as? String ?? "direct"
                     let participantCount = (conversationData["participantIds"] as? [String])?.count ?? 0
                     
+                    print("📝 Setting up listener for conversation: \(conversationDoc.documentID)")
+                    print("   Conversation type: \(conversationType), participants: \(participantCount)")
+                    
                     let insightsRef = conversationDoc.reference
                         .collection("insights")
                         .whereField("type", isEqualTo: "decision")
                         .whereField("dismissed", isEqualTo: false)
+                    
+                    print("   Query: conversations/\(conversationDoc.documentID)/insights where type='decision' and dismissed=false")
                     
                     // Use real-time listener for live vote updates
                     let listener = insightsRef.addSnapshotListener { [weak self] snapshot, error in
@@ -57,42 +72,70 @@ class DecisionsViewModel: ObservableObject {
                             return
                         }
                         
-                        guard let documents = snapshot?.documents else { return }
+                        guard let documents = snapshot?.documents else {
+                            print("⚠️ No documents in snapshot for conversation \(conversationDoc.documentID)")
+                            return
+                        }
+                        
+                        print("📥 Received \(documents.count) documents from Firestore for conversation \(conversationDoc.documentID)")
                         
                         let insights = documents.compactMap { doc -> AIInsight? in
-                            try? doc.data(as: AIInsight.self)
+                            let insight = try? doc.data(as: AIInsight.self)
+                            if let insight = insight {
+                                let isPoll = insight.metadata?.isPoll == true
+                                let pollId = insight.metadata?.pollId
+                                let pollStatus = insight.metadata?.pollStatus ?? "unknown"
+                                print("   📄 Document \(doc.documentID): isPoll=\(isPoll), pollId=\(pollId ?? "nil"), pollStatus=\(pollStatus)")
+                            }
+                            return insight
                         }.filter { insight in
                             // Show different decision types based on context
                             let isPoll = insight.metadata?.isPoll == true
                             let isConsenusDecision = insight.metadata?.pollId != nil
+                            let pollStatus = insight.metadata?.pollStatus ?? "active"
+                            
+                            print("   🔍 Filtering \(insight.id): isPoll=\(isPoll), isConsensus=\(isConsenusDecision), pollStatus=\(pollStatus)")
                             
                             if isPoll {
-                                // Polls visible for any conversation with 2+ participants
-                                return participantCount >= 2
+                                // CRITICAL: Show ALL polls (active and confirmed) for historical record
+                                // Previously only showed active polls, causing confirmed polls to disappear
+                                let shouldShow = participantCount >= 2
+                                print("      → Poll: showing=\(shouldShow) (participants: \(participantCount))")
+                                return shouldShow
                             } else if isConsenusDecision {
                                 // CRITICAL FIX: Always show consensus decisions regardless of participant count
                                 // These are important final decisions that reached agreement
+                                print("      → Consensus decision: showing=true (always show)")
                                 return true
                             } else {
                                 // Regular decisions only for group chats (3+ participants)
-                                return conversationType == "group" || participantCount >= 3
+                                let shouldShow = conversationType == "group" || participantCount >= 3
+                                print("      → Regular decision: showing=\(shouldShow) (type: \(conversationType))")
+                                return shouldShow
                             }
                         }
+                        
+                        print("✅ After filtering: \(insights.count) insights to display")
                         
                         Task { @MainActor in
                             // Remove old insights from this conversation
                             let conversationId = conversationDoc.documentID
+                            let oldCount = self.decisions.filter { $0.conversationId == conversationId }.count
                             self.decisions.removeAll { $0.conversationId == conversationId }
+                            print("🔄 Removed \(oldCount) old insights, adding \(insights.count) new insights")
                             
                             // Add new insights
                             self.decisions.append(contentsOf: insights)
                             
                             // Sort by creation date (newest first)
                             self.decisions.sort { $0.createdAt > $1.createdAt }
+                            
+                            print("📊 Total decisions now: \(self.decisions.count)")
                         }
                     }
                     
                     self.listeners.append(listener)
+                    print("✅ Listener attached for conversation \(conversationDoc.documentID)")
                 }
                 
                 self.isLoading = false
@@ -211,6 +254,7 @@ class DecisionsViewModel: ObservableObject {
             ])
             
             print("✅ poll confirmed successfully")
+            print("📝 Poll document path: conversations/\(decision.conversationId)/insights/\(decision.id)")
             
             // create decision entry
             let decisionRef = db.collection("conversations")
@@ -220,6 +264,15 @@ class DecisionsViewModel: ObservableObject {
             
             let totalVotes = votes.count
             let consensusReached = voteCounts.count == 1 && voteCount == totalVotes
+            
+            print("📊 Creating decision document:")
+            print("   Decision ID: \(decisionRef.documentID)")
+            print("   Path: conversations/\(decision.conversationId)/insights/\(decisionRef.documentID)")
+            print("   Type: decision")
+            print("   Poll ID: \(decision.id)")
+            print("   Winning option: \(winningOption)")
+            print("   Vote count: \(voteCount) of \(totalVotes)")
+            print("   Consensus: \(consensusReached)")
             
             let decisionData: [String: Any] = [
                 "id": decisionRef.documentID,
@@ -240,9 +293,13 @@ class DecisionsViewModel: ObservableObject {
                 "dismissed": false
             ]
             
+            print("📤 Writing decision document to Firestore...")
             try await decisionRef.setData(decisionData)
             
-            print("✅ decision entry created: \(decisionRef.documentID)")
+            print("✅ Decision entry created successfully!")
+            print("   Document ID: \(decisionRef.documentID)")
+            print("   This decision should now appear in Decisions tab for all participants")
+            print("   Real-time listener will pick it up automatically")
             
             // post system message
             let messageRef = db.collection("conversations")
@@ -336,12 +393,15 @@ class DecisionsViewModel: ObservableObject {
     // MARK: - Cleanup
     
     func cleanup() {
+        print("🧹 Cleanup called - removing \(listeners.count) listeners")
         decisionsTask?.cancel()
         listeners.forEach { $0.remove() }
         listeners.removeAll()
+        print("✅ Cleanup complete - all listeners removed")
     }
     
     deinit {
+        print("💀 DecisionsViewModel deinit - cleaning up \(listeners.count) listeners")
         decisionsTask?.cancel()
         listeners.forEach { $0.remove() }
     }
