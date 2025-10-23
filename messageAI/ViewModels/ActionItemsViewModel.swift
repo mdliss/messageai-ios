@@ -26,14 +26,20 @@ class ActionItemsViewModel: ObservableObject {
     // MARK: - Load Action Items
     
     /// Subscribe to action items for a conversation
-    /// - Parameter conversationId: Conversation ID
-    func subscribeToActionItems(conversationId: String) {
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - currentUserId: Current user ID (to filter items created by this user only)
+    func subscribeToActionItems(conversationId: String, currentUserId: String) {
         // Clean up previous listener
         listener?.remove()
         
+        // CRITICAL: Filter by createdBy to show only items created by current user
+        // This prevents action items from syncing across all participants
+        // (similar to how summaries are filtered by triggeredBy)
         let itemsRef = db.collection("conversations")
             .document(conversationId)
             .collection("actionItems")
+            .whereField("createdBy", isEqualTo: currentUserId)
             .order(by: "createdAt", descending: true)
         
         listener = itemsRef.addSnapshotListener { [weak self] snapshot, error in
@@ -57,7 +63,7 @@ class ActionItemsViewModel: ObservableObject {
             
             Task { @MainActor in
                 self.actionItems = items
-                print("✅ Loaded \(items.count) action items")
+                print("✅ Loaded \(items.count) action items (filtered by createdBy: \(currentUserId))")
             }
         }
     }

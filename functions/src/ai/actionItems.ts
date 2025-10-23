@@ -205,13 +205,55 @@ Return ONLY the JSON array:`,
         .doc(conversationId)
         .collection('actionItems');
       
+      // CRITICAL FIX: Check for duplicates before creating
+      // Fetch existing action items created by this user to avoid duplicates
+      console.log(`🔍 Checking for existing action items to avoid duplicates...`);
+      
+      const existingItemsSnapshot = await actionItemsCollection
+        .where('createdBy', '==', context.auth.uid)
+        .get();
+      
+      const existingItems = existingItemsSnapshot.docs.map(doc => doc.data());
+      console.log(`   Found ${existingItems.length} existing action items created by this user`);
+      
+      // Helper function to check if item is duplicate
+      const isDuplicate = (newItem: any): boolean => {
+        const newTitle = newItem.title?.toLowerCase().trim();
+        const newAssignee = newItem.assignee?.toLowerCase().trim();
+        
+        return existingItems.some(existing => {
+          const existingTitle = existing.title?.toLowerCase().trim();
+          const existingAssignee = existing.assignee?.toLowerCase().trim();
+          
+          // Consider it a duplicate if:
+          // 1. Same title AND same assignee (if both have assignees)
+          // 2. Same title AND both have no assignee
+          if (existingTitle === newTitle) {
+            if (newAssignee && existingAssignee) {
+              return newAssignee === existingAssignee;
+            } else if (!newAssignee && !existingAssignee) {
+              return true;
+            }
+          }
+          return false;
+        });
+      };
+      
       console.log(`💾 Creating ${parsedItems.length} action item documents in Firestore...`);
       
       const createdItems: any[] = [];
+      const skippedDuplicates: any[] = [];
       
       for (let i = 0; i < parsedItems.length; i++) {
         const item = parsedItems[i];
         console.log(`📝 Processing item ${i + 1}/${parsedItems.length}: "${item.title}"`);
+        
+        // Check for duplicates
+        if (isDuplicate(item)) {
+          console.log(`   ⚠️ SKIPPING: Duplicate item already exists`);
+          skippedDuplicates.push(item);
+          continue;
+        }
         
         const itemRef = actionItemsCollection.doc();
         
@@ -263,12 +305,14 @@ Return ONLY the JSON array:`,
       
       console.log(`🎉 Action items extraction complete!`);
       console.log(`   Total items created: ${createdItems.length}`);
-      console.log(`   Items will appear in ActionItemsView panel on requesting device only`);
+      console.log(`   Duplicates skipped: ${skippedDuplicates.length}`);
+      console.log(`   Items will appear ONLY for requesting user (filtered by createdBy)`);
       
       return {
         success: true,
         items: createdItems,
-        itemCount: createdItems.length
+        itemCount: createdItems.length,
+        skippedDuplicates: skippedDuplicates.length
       };
       
     } catch (error: any) {

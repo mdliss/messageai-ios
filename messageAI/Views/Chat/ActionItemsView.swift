@@ -202,7 +202,7 @@ struct ActionItemsView: View {
                 Text(extractionMessage)
             }
             .onAppear {
-                viewModel.subscribeToActionItems(conversationId: conversationId)
+                viewModel.subscribeToActionItems(conversationId: conversationId, currentUserId: currentUserId)
             }
             .onDisappear {
                 viewModel.cleanup()
