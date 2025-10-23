@@ -13,6 +13,38 @@ struct MessageBubbleView: View {
     let isFromCurrentUser: Bool
     let showSenderName: Bool
     
+    @ObservedObject private var networkMonitor = NetworkMonitor.shared
+    
+    // MARK: - Computed Properties
+    
+    /// Only show "Not Delivered" when offline OR explicitly failed (not during normal sending)
+    /// 
+    /// Expected behavior:
+    /// - Online + sending → NO indicator (fast upload, will show checkmark within milliseconds)
+    /// - Offline + sending → "Not Delivered" (queued locally)
+    /// - Failed → "Not Delivered" (always show for retry)
+    /// - Sent/Delivered → Single checkmark (gray)
+    /// - Read → Double checkmark (blue)
+    private var shouldShowNotDelivered: Bool {
+        guard message.status == .sending || message.status == .failed else {
+            return false
+        }
+        
+        // Always show for failed messages
+        if message.status == .failed {
+            return true
+        }
+        
+        // For sending messages, only show if offline
+        if message.status == .sending {
+            // CRITICAL: Only show "Not Delivered" when actually offline
+            // When online, message sends fast enough that indicator shouldn't flash
+            return !message.isSynced && !networkMonitor.isConnected
+        }
+        
+        return false
+    }
+    
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
             // Spacer on left for sent messages
@@ -70,8 +102,8 @@ struct MessageBubbleView: View {
                 }
                 .padding(.horizontal, 4)
                 
-                // Not Delivered indicator
-                if isFromCurrentUser && (message.status == .sending || message.status == .failed) && !message.isSynced {
+                // Not Delivered indicator - ONLY show when offline or explicitly failed
+                if isFromCurrentUser && shouldShowNotDelivered {
                     Text("Not Delivered")
                         .font(.caption2)
                         .fontWeight(.bold)
