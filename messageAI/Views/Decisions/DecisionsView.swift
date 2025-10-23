@@ -186,6 +186,13 @@ struct PollView: View {
     let currentUserId: String
     let onVote: (Int) -> Void
     
+    @EnvironmentObject var decisionsViewModel: DecisionsViewModel
+    
+    @State private var isConfirming = false
+    @State private var isCancelling = false
+    @State private var showCancelConfirmation = false
+    @State private var errorMessage: String?
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // Poll title with finalization status
@@ -275,6 +282,85 @@ struct PollView: View {
                 .cornerRadius(8)
             }
             
+            // CRITICAL: Confirm/Cancel buttons - only visible to poll creator
+            let isCreator = currentUserId == decision.metadata?.createdBy
+            let pollStatus = decision.metadata?.pollStatus ?? "active" // backward compatibility
+            let canConfirm = isCreator && pollStatus == "active" && !isFinalized
+            
+            if canConfirm {
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        // Confirm Decision button
+                        Button {
+                            print("🎯 confirm decision tapped by user \(currentUserId)")
+                            Task {
+                                await confirmPoll()
+                            }
+                        } label: {
+                            HStack {
+                                if isConfirming {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .tint(.white)
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                }
+                                Text(isConfirming ? "confirming..." : "confirm decision")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(8)
+                        }
+                        .disabled(isConfirming || isCancelling)
+                        
+                        // Cancel Poll button
+                        Button {
+                            print("🚫 cancel poll tapped by user \(currentUserId)")
+                            showCancelConfirmation = true
+                        } label: {
+                            HStack {
+                                Image(systemName: "xmark.circle.fill")
+                                Text("cancel poll")
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.red.opacity(0.1))
+                            .foregroundColor(.red)
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.red, lineWidth: 2)
+                            )
+                        }
+                        .disabled(isConfirming || isCancelling)
+                    }
+                    .padding(.vertical, 8)
+                }
+                .confirmationDialog(
+                    "cancel poll?",
+                    isPresented: $showCancelConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("cancel poll", role: .destructive) {
+                        print("🚫 cancel confirmed by user \(currentUserId)")
+                        Task {
+                            await cancelPoll()
+                        }
+                    }
+                    Button("keep poll", role: .cancel) { }
+                } message: {
+                    Text("this will remove the poll for all participants")
+                }
+            } else if !isCreator && !isFinalized && pollStatus == "active" {
+                // Participant view - waiting for creator
+                Text("waiting for creator to confirm...")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+            }
+            
             // Timestamp and stats
             HStack {
                 Image(systemName: "clock")
@@ -330,6 +416,22 @@ struct PollView: View {
             "• option 2: friday 10am EST / 7am PST / 3pm GMT / 8:30pm IST",
             "• option 3: friday 1pm EST / 10am PST / 6pm GMT / 11:30pm IST"
         ]
+    }
+    
+    /// Confirm poll and create decision
+    private func confirmPoll() async {
+        print("🎯 confirmPoll called for poll \(decision.id)")
+        isConfirming = true
+        await decisionsViewModel.confirmPoll(decision: decision, userId: currentUserId)
+        isConfirming = false
+    }
+    
+    /// Cancel poll
+    private func cancelPoll() async {
+        print("🚫 cancelPoll called for poll \(decision.id)")
+        isCancelling = true
+        await decisionsViewModel.cancelPoll(decision: decision, userId: currentUserId)
+        isCancelling = false
     }
 }
 

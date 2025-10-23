@@ -138,125 +138,48 @@ export const confirmSchedulingSelection = functions
         
         console.log(`📊 Poll status: ${voteCount}/${participantIds.length} votes`);
         
-        // Only finalize if all participants have voted
+        // CRITICAL CHANGE: Do NOT auto-finalize polls anymore
+        // Instead, always wait for creator to manually confirm
+        
+        // Determine message based on vote count
+        let acknowledgmentText: string;
         if (voteCount >= participantIds.length) {
-          // Count votes for each option
-          const voteCounts: {[key: string]: number} = {};
-          Object.values(votes).forEach((vote: any) => {
-            voteCounts[vote] = (voteCounts[vote] || 0) + 1;
-          });
-          
-          // Find winning option
-          let maxVotes = 0;
-          let winningOption = 'option_1';
-          Object.entries(voteCounts).forEach(([option, count]) => {
-            if (count > maxVotes) {
-              maxVotes = count;
-              winningOption = option;
-            }
-          });
-          
-          // Extract winning time from poll
-          const timeOptions = updatedPollData?.metadata?.timeOptions || [];
-          const winningIndex = parseInt(winningOption.split('_')[1]) - 1;
-          const winningTime = timeOptions[winningIndex] || selectedOption;
-          
-          // Post final decision message
-          const finalMessageRef = admin.firestore()
-            .collection('conversations')
-            .doc(conversationId)
-            .collection('messages')
-            .doc();
-          
-          const finalMessage = {
-            id: finalMessageRef.id,
-            conversationId: conversationId,
-            senderId: 'ai_assistant',
-            senderName: 'ai assistant',
-            senderPhotoURL: null,
-            type: 'text',
-            text: `🎉 everyone has voted! the meeting is scheduled for:\n\n${winningTime}\n\n(${maxVotes} of ${participantIds.length} votes)`,
-            imageURL: null,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            status: 'sent',
-            deliveredTo: [],
-            readBy: [],
-            localId: null,
-            isSynced: true,
-            priority: false,
-          };
-          
-          await finalMessageRef.set(finalMessage);
-          
-          // KEEP poll visible but mark as finalized
-          await activePoll.ref.update({
-            'metadata.finalized': true,
-            'metadata.winningOption': winningOption,
-            'metadata.winningTime': winningTime,
-            'metadata.totalVotes': participantIds.length
-          });
-          
-          // CRITICAL FIX: Create separate consensus decision entry
-          // This ensures the decision is logged even if poll gets dismissed
-          const consensusDecisionRef = admin.firestore()
-            .collection('conversations')
-            .doc(conversationId)
-            .collection('insights')
-            .doc();
-          
-          const consensusDecision = {
-            id: consensusDecisionRef.id,
-            conversationId: conversationId,
-            type: 'decision',
-            content: `Meeting scheduled: ${winningTime}`,
-            metadata: {
-              pollId: activePoll.id,
-              winningOption: winningOption,
-              winningTime: winningTime,
-              totalVotes: participantIds.length,
-              voteCount: maxVotes,
-              consensusReached: maxVotes === participantIds.length
-            },
-            messageIds: [finalMessageRef.id],
-            triggeredBy: 'system',
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            dismissed: false
-          };
-          
-          await consensusDecisionRef.set(consensusDecision);
-          
-          console.log(`✅ Poll completed and saved to decisions! Winning option: ${winningOption} with ${maxVotes} votes`);
-          console.log(`   Decision will remain visible in decisions tab with results`);
-          console.log(`   Created separate consensus decision entry: ${consensusDecisionRef.id}`);
+          // All votes recorded - waiting for creator to confirm
+          console.log(`✅ All votes recorded! Waiting for creator to confirm poll.`);
+          acknowledgmentText = `✅ all votes recorded! poll creator can now confirm the final decision in the decisions tab.`;
         } else {
-          // Acknowledge vote but don't finalize yet
-          const confirmationRef = admin.firestore()
-            .collection('conversations')
-            .doc(conversationId)
-            .collection('messages')
-            .doc();
-          
-          const confirmationMessage = {
-            id: confirmationRef.id,
-            conversationId: conversationId,
-            senderId: 'ai_assistant',
-            senderName: 'ai assistant',
-            senderPhotoURL: null,
-            type: 'text',
-            text: `✅ vote recorded for ${selectedOption}! waiting for ${participantIds.length - voteCount} more ${participantIds.length - voteCount === 1 ? 'person' : 'people'} to vote.`,
-            imageURL: null,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            status: 'sent',
-            deliveredTo: [],
-            readBy: [],
-            localId: null,
-            isSynced: true,
-            priority: false,
-          };
-          
-          await confirmationRef.set(confirmationMessage);
-          console.log(`📊 Vote acknowledged. Waiting for more votes: ${voteCount}/${participantIds.length}`);
+          // Still waiting for more votes
+          const remainingVotes = participantIds.length - voteCount;
+          acknowledgmentText = `✅ vote recorded for ${selectedOption}! waiting for ${remainingVotes} more ${remainingVotes === 1 ? 'person' : 'people'} to vote.`;
         }
+        
+        // Post acknowledgment message
+        const confirmationRef = admin.firestore()
+          .collection('conversations')
+          .doc(conversationId)
+          .collection('messages')
+          .doc();
+        
+        const confirmationMessage = {
+          id: confirmationRef.id,
+          conversationId: conversationId,
+          senderId: 'ai_assistant',
+          senderName: 'ai assistant',
+          senderPhotoURL: null,
+          type: 'text',
+          text: acknowledgmentText,
+          imageURL: null,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          status: 'sent',
+          deliveredTo: [],
+          readBy: [],
+          localId: null,
+          isSynced: true,
+          priority: false,
+        };
+        
+        await confirmationRef.set(confirmationMessage);
+        console.log(`📊 Vote acknowledged. Poll remains active for manual confirmation: ${voteCount}/${participantIds.length}`)
         
         return;
       }

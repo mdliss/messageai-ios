@@ -1,0 +1,545 @@
+# Product Requirements Document: Manual Poll Confirmation
+
+## Executive Summary
+
+Currently, polls in MessageAI auto-finalize when all participants vote, but there's no way for the poll creator to manually confirm or cancel a poll before it's complete. This creates issues when:
+- Creator wants to finalize early with partial votes
+- Poll needs to be cancelled
+- Creator wants to act as tiebreaker
+- Creator wants control over when decision is final
+
+This PRD defines a manual confirmation system where poll creators can explicitly confirm or cancel polls, giving them full control over the decision-making process.
+
+## Problem Statement
+
+### Current Behavior
+1. Poll is created when user clicks "yes, help me" on scheduling suggestion
+2. Participants vote by clicking options in Decisions tab or typing "option 1/2/3" in chat
+3. Poll auto-finalizes when all participants vote
+4. AI announces winner and poll becomes finalized decision
+5. No manual control for creator
+
+### Issues
+- No way to confirm poll early with partial votes
+- No way to cancel unwanted polls
+- Creator has no control over finalization timing
+- Can't act as tiebreaker in split votes
+- All-or-nothing voting (must wait for everyone)
+
+## Proposed Solution
+
+### Core Concept
+Add "Confirm Decision" and "Cancel Poll" buttons visible ONLY to poll creator in Decisions tab. Creator has full control over when poll is finalized.
+
+### User Flows
+
+#### Flow 1: Creator Confirms Poll
+1. Creator sees active poll in Decisions tab
+2. Sees vote counts and participant voting status
+3. Sees two buttons: "Confirm Decision" and "Cancel Poll"
+4. Clicks "Confirm Decision"
+5. Button shows loading state
+6. Poll updates to "confirmed" status
+7. Winning option is marked
+8. Decision entry created in Decisions tab
+9. Toast notification sent to all participants
+10. All devices show finalized poll within 2 seconds
+
+#### Flow 2: Creator Cancels Poll
+1. Creator sees active poll in Decisions tab
+2. Clicks "Cancel Poll"
+3. Confirmation dialog: "Are you sure you want to cancel this poll?"
+4. Confirms cancellation
+5. Poll status updates to "cancelled"
+6. Poll removed from Decisions tab
+7. Toast notification sent to all participants
+8. Optional: System message in chat about cancellation
+
+#### Flow 3: Participant Views Poll
+1. Participant sees active poll in Decisions tab
+2. Sees vote counts and their own vote
+3. Sees "Waiting for creator to confirm" message
+4. NO buttons visible (not the creator)
+5. Cannot finalize poll themselves
+
+#### Flow 4: Everyone Views Confirmed Poll
+1. Poll creator confirms decision
+2. All participants see poll update to confirmed
+3. Winning option clearly marked with green badge
+4. Vote count and results visible
+5. Creator name and confirmation time shown
+6. Poll can no longer be voted on
+
+## Technical Requirements
+
+### Data Model Updates
+
+#### Poll Document (Firestore)
+```
+conversations/{conversationId}/insights/{pollId}
+
+Current fields:
+- id: string
+- conversationId: string
+- type: "decision"
+- content: string (poll description)
+- metadata.isPoll: true
+- metadata.votes: {[userId]: "option_1/2/3"}
+- metadata.timeOptions: string[]
+- metadata.createdBy: string
+- createdAt: timestamp
+- dismissed: boolean
+
+NEW fields needed:
+- metadata.pollStatus: "active" | "confirmed" | "cancelled"
+- metadata.confirmedBy: string | null (userId who confirmed)
+- metadata.confirmedAt: timestamp | null
+- metadata.winningOption: string | null (set on confirm)
+- metadata.participantIds: string[] (all participant user IDs)
+```
+
+#### Decision Document (Created on Confirmation)
+```
+conversations/{conversationId}/insights/{decisionId}
+
+Fields:
+- id: string
+- conversationId: string
+- type: "decision"
+- content: string (summary of decision)
+- metadata.pollId: string (link to original poll)
+- metadata.winningOption: string
+- metadata.winningTime: string (formatted time)
+- metadata.voteCount: number (votes for winning option)
+- metadata.totalVotes: number (total participants)
+- metadata.consensusReached: boolean (all voted same?)
+- metadata.confirmedBy: string (userId)
+- createdAt: timestamp
+- dismissed: false
+```
+
+### iOS UI Changes
+
+#### DecisionsView.swift
+```
+PollView enhancement:
+- Add @State var showCancelConfirmation = false
+- Add confirmation logic
+- Add cancel logic
+- Add button visibility logic
+
+New UI components:
+1. Confirm button (green)
+2. Cancel button (red)
+3. Confirmation dialog
+4. Loading states
+5. Error handling
+```
+
+#### Button Visibility Logic
+```
+Show buttons when:
+- Current user ID == poll.metadata.createdBy
+- poll.metadata.pollStatus == "active"
+- At least one vote has been cast (OR any time, user's choice)
+
+Hide buttons when:
+- Current user is not creator
+- Poll status is "confirmed" or "cancelled"
+```
+
+#### UI States
+
+**Active Poll (Creator View)**:
+```
+📊 meeting time poll
+
+Option 1: thursday 12pm EST...     [✓] [2 votes]
+Option 2: friday 10am EST...           [1 vote]
+Option 3: friday 1pm EST...            [0 votes]
+
+2 of 3 participants voted
+
+[Confirm Decision]  [Cancel Poll]
+
+⏱️ Created 2 hours ago
+```
+
+**Active Poll (Participant View)**:
+```
+📊 meeting time poll
+
+Option 1: thursday 12pm EST...     [✓] [2 votes]
+Option 2: friday 10am EST...           [1 vote]
+Option 3: friday 1pm EST...            [0 votes]
+
+2 of 3 participants voted
+
+Waiting for creator to confirm...
+
+⏱️ Created 2 hours ago
+```
+
+**Confirmed Poll (All Users)**:
+```
+✅ meeting scheduled ✓
+
+Option 1: thursday 12pm EST...     [🏆 WINNER] [2 votes]
+Option 2: friday 10am EST...                  [1 vote]
+Option 3: friday 1pm EST...                   [0 votes]
+
+Final decision: thursday 12pm EST / 9am PST / 5pm GMT / 10:30pm IST
+
+Confirmed by: Alice | 2 hours ago
+```
+
+### Backend Changes
+
+#### New Cloud Function: confirmPoll
+```
+Trigger: Manual call from iOS app when creator clicks confirm
+
+Logic:
+1. Verify user is poll creator
+2. Verify poll status is "active"
+3. Calculate winning option (most votes)
+4. Update poll document:
+   - pollStatus = "confirmed"
+   - winningOption = calculated winner
+   - confirmedBy = userId
+   - confirmedAt = timestamp
+5. Create decision document
+6. Post system message to chat
+7. Send FCM notifications to all participants
+8. Return success/error
+```
+
+#### New Cloud Function: cancelPoll
+```
+Trigger: Manual call from iOS app when creator clicks cancel
+
+Logic:
+1. Verify user is poll creator
+2. Verify poll status is "active"
+3. Update poll document:
+   - pollStatus = "cancelled"
+   - dismissed = true
+4. Post system message to chat (optional)
+5. Send FCM notifications to all participants
+6. Return success/error
+```
+
+#### Modify: confirmSchedulingSelection
+```
+Current: Auto-finalizes when all vote
+
+NEW logic:
+- Record vote in poll.metadata.votes
+- Check if all participants voted
+- If YES:
+  - Send message: "all votes recorded! waiting for creator to confirm"
+  - Do NOT auto-finalize
+- If NO:
+  - Send message: "vote recorded! waiting for X more people"
+```
+
+### Real-time Sync Requirements
+
+1. **Poll Status Updates**: All devices listen to poll document changes
+2. **Vote Updates**: Real-time listener on metadata.votes
+3. **Decision Creation**: Real-time listener on insights collection
+4. **Toast Notifications**: FCM push notifications for confirmation/cancellation
+5. **Latency Target**: < 2 seconds for all updates to propagate
+
+### API Endpoints
+
+#### Confirm Poll
+```
+POST /confirmPoll
+Body: {
+  conversationId: string,
+  pollId: string,
+  userId: string
+}
+
+Response: {
+  success: boolean,
+  winningOption: string,
+  voteCount: number,
+  decisionId: string
+}
+```
+
+#### Cancel Poll
+```
+POST /cancelPoll
+Body: {
+  conversationId: string,
+  pollId: string,
+  userId: string
+}
+
+Response: {
+  success: boolean
+}
+```
+
+## Edge Cases
+
+### 1. Creator Votes Last
+- Creator casts final vote
+- Confirm/Cancel buttons appear immediately
+- Other participants see "waiting for creator to confirm"
+
+### 2. Not All Participants Vote
+- Only 2/3 vote
+- Creator can still confirm with partial votes
+- Decision shows "2/3 voted"
+
+### 3. Tied Votes
+- Multiple options have same vote count
+- Creator can confirm any option (acts as tiebreaker)
+- Decision shows which option creator chose
+
+### 4. Creator Never Confirms
+- Poll stays "active" indefinitely
+- Acceptable behavior
+- Participants see "waiting for creator" forever
+
+### 5. Creator Leaves Group
+- Poll becomes orphaned
+- Options:
+  - Auto-assign new creator (first participant)
+  - Auto-cancel poll
+  - Leave orphaned (chosen for simplicity)
+
+### 6. Multiple Polls Active
+- Group has 3 active polls simultaneously
+- Each operates independently
+- Each has own confirm/cancel buttons
+- No interference
+
+### 7. Rapid Confirmation
+- Creator confirms immediately (0 votes)
+- Allowed - creator's choice
+- Decision shows "0/3 voted"
+
+### 8. Network Issues During Confirmation
+- Show loading spinner
+- Retry with exponential backoff
+- Show error message if persistent failure
+- Keep buttons enabled for retry
+
+### 9. Concurrent Confirmation
+- Two users try to confirm simultaneously
+- Firestore transaction handles conflict
+- Only first succeeds
+- Second gets error: "poll already confirmed"
+
+### 10. Poll Already Cancelled
+- User tries to confirm cancelled poll
+- Error: "poll has been cancelled"
+- UI should prevent this (hide buttons)
+
+## Success Metrics
+
+### Functional Requirements
+- [ ] Poll creator sees confirm/cancel buttons after votes
+- [ ] Participants do NOT see buttons
+- [ ] Confirm creates decision entry
+- [ ] Cancel removes poll
+- [ ] Decision persists after confirmation
+- [ ] All participants see confirmed decision
+- [ ] Buttons only visible to creator
+- [ ] Buttons hidden when poll finalized
+- [ ] Real-time updates < 2 seconds
+- [ ] Toast notifications work
+
+### Non-Functional Requirements
+- [ ] No build errors
+- [ ] No console errors
+- [ ] Extensive logging throughout
+- [ ] Graceful error handling
+- [ ] Loading states for all async operations
+- [ ] Optimistic UI updates
+- [ ] Works offline (queued sync)
+
+## Testing Requirements
+
+### Manual Testing (iOS Simulator MCP)
+
+#### Test 1: Full Consensus
+- 3 simulators: User A (creator), User B, User C
+- Create group chat
+- A creates poll
+- All vote same option
+- A sees confirm/cancel buttons
+- B and C see "waiting for creator"
+- A confirms
+- Toast notifications on all devices
+- Decision appears in all Decisions tabs
+- Poll shows as confirmed on all devices
+
+#### Test 2: Cancel Poll
+- Same 3 simulators
+- A creates poll
+- B and C vote
+- A cancels poll
+- Toast notifications on all devices
+- Poll disappears from Decisions tab
+
+#### Test 3: Partial Voting
+- A creates poll
+- Only A and B vote (C doesn't vote)
+- A sees confirm/cancel buttons
+- A confirms
+- Decision shows "2/3 participants voted"
+
+#### Test 4: Tied Votes
+- A creates poll with 3 options
+- Each user votes different option (3-way tie)
+- A sees confirm/cancel buttons
+- A confirms any option (tiebreaker)
+- Decision records chosen option
+
+#### Test 5: Immediate Confirmation
+- A creates poll
+- A immediately confirms (0 votes)
+- Works successfully
+- Decision shows "1/3 votes"
+- B and C see confirmed poll, cannot vote
+
+#### Test 6: Real-time Sync
+- All 3 simulators have Decisions tab open
+- A creates poll → appears on all within 2s
+- B votes → vote count updates on all in real-time
+- A confirms → UI updates to confirmed on all immediately
+
+#### Test 7: Multiple Polls
+- A creates Poll 1 (meeting time)
+- A creates Poll 2 (lunch location)
+- Both visible in Decisions tab
+- B and C vote on both
+- A confirms Poll 1 → Poll 2 still active
+- A confirms Poll 2 → both confirmed independently
+
+## Implementation Order
+
+### Phase 1: Data Model (1 task)
+- Add pollStatus, confirmedBy, confirmedAt, participantIds to InsightMetadata
+- Deploy Firestore security rules
+- Test Firestore writes
+
+### Phase 2: Backend Functions (2 tasks)
+- Create confirmPoll cloud function
+- Create cancelPoll cloud function
+- Modify confirmSchedulingSelection to NOT auto-finalize
+- Add extensive logging
+- Deploy and test functions
+
+### Phase 3: iOS UI - Buttons (1 task)
+- Add confirm/cancel buttons to PollView
+- Implement visibility logic (creator only)
+- Add loading states
+- Add error handling
+- Test button appearance
+
+### Phase 4: iOS Logic - Confirmation (1 task)
+- Implement confirm button tap handler
+- Call confirmPoll cloud function
+- Handle success/error responses
+- Show toast notification
+- Test confirmation flow
+
+### Phase 5: iOS Logic - Cancellation (1 task)
+- Add confirmation dialog
+- Implement cancel button tap handler
+- Call cancelPoll cloud function
+- Handle success/error responses
+- Show toast notification
+- Test cancellation flow
+
+### Phase 6: Real-time Sync (1 task)
+- Add Firestore listeners for poll status
+- Update UI when poll status changes
+- Test real-time updates across devices
+- Verify < 2 second latency
+
+### Phase 7: Testing & Documentation (1 task)
+- Run all 7 manual test cases
+- Capture screenshots
+- Update architecture docs
+- Document edge cases
+- Create completion summary
+
+## Dependencies
+
+### External
+- Firebase Firestore (existing)
+- Firebase Cloud Functions (existing)
+- Firebase Cloud Messaging (existing)
+- SwiftUI (existing)
+
+### Internal
+- DecisionsViewModel.swift (modify)
+- DecisionsView.swift (modify)
+- AIInsight.swift (modify metadata)
+- FirestoreService.swift (add confirmPoll/cancelPoll)
+- NotificationService.swift (add toast notifications)
+
+## Constraints
+
+### Technical
+- Must work with existing poll creation flow
+- Must maintain backward compatibility
+- Cannot break current auto-finalization for old polls
+- Must work offline with sync queue
+
+### Business
+- Cannot change data structure in breaking way
+- Must preserve existing decisions
+- Must work within Firebase free tier limits
+
+## Open Questions
+
+1. Should we auto-assign new creator if original leaves group?
+   - Answer: No, keep it simple. Orphaned polls stay orphaned.
+
+2. Should participants be able to cancel their own votes?
+   - Answer: Not in this version. Future enhancement.
+
+3. Should we show partial results before confirmation?
+   - Answer: Yes, show vote counts in real-time.
+
+4. Should there be a time limit for confirmation?
+   - Answer: No, creator decides timing.
+
+5. Should we allow changing votes after casting?
+   - Answer: Not in this version. Future enhancement.
+
+## Success Criteria
+
+This feature is successful when:
+1. All 7 manual test cases pass
+2. No build errors
+3. No console errors
+4. Real-time sync works reliably
+5. Toast notifications appear on all devices
+6. Buttons only visible to poll creator
+7. Decisions persist after confirmation
+8. Edge cases handled gracefully
+9. Code follows KISS and DRY principles
+10. Extensive logging for debugging
+
+## Timeline Estimate
+
+- Phase 1 (Data Model): 30 minutes
+- Phase 2 (Backend): 1 hour
+- Phase 3 (Buttons): 30 minutes
+- Phase 4 (Confirmation): 45 minutes
+- Phase 5 (Cancellation): 45 minutes
+- Phase 6 (Real-time): 30 minutes
+- Phase 7 (Testing): 1 hour
+
+Total: ~5 hours implementation + testing
+

@@ -135,6 +135,10 @@ struct InsightMetadata: Codable, Equatable {
     var pollId: String?           // NEW: Link to original poll
     var voteCount: Int?            // NEW: Number of votes for winning option
     var consensusReached: Bool?    // NEW: True if all voted same
+    var pollStatus: String?        // NEW: "active", "confirmed", "cancelled"
+    var confirmedBy: String?       // NEW: userId who confirmed poll
+    var confirmedAt: Date?         // NEW: timestamp when confirmed
+    var participantIds: [String]?  // NEW: all participant user IDs
     
     init(bulletPoints: Int? = nil,
          messageCount: Int? = nil,
@@ -153,7 +157,11 @@ struct InsightMetadata: Codable, Equatable {
          totalVotes: Int? = nil,
          pollId: String? = nil,
          voteCount: Int? = nil,
-         consensusReached: Bool? = nil) {
+         consensusReached: Bool? = nil,
+         pollStatus: String? = nil,
+         confirmedBy: String? = nil,
+         confirmedAt: Date? = nil,
+         participantIds: [String]? = nil) {
         self.bulletPoints = bulletPoints
         self.messageCount = messageCount
         self.approvedBy = approvedBy
@@ -172,6 +180,10 @@ struct InsightMetadata: Codable, Equatable {
         self.pollId = pollId
         self.voteCount = voteCount
         self.consensusReached = consensusReached
+        self.pollStatus = pollStatus
+        self.confirmedBy = confirmedBy
+        self.confirmedAt = confirmedAt
+        self.participantIds = participantIds
     }
     
     func toDictionary() -> [String: Any] {
@@ -230,6 +242,18 @@ struct InsightMetadata: Codable, Equatable {
         }
         if let consensusReached = consensusReached {
             dict["consensusReached"] = consensusReached
+        }
+        if let pollStatus = pollStatus {
+            dict["pollStatus"] = pollStatus
+        }
+        if let confirmedBy = confirmedBy {
+            dict["confirmedBy"] = confirmedBy
+        }
+        if let confirmedAt = confirmedAt {
+            dict["confirmedAt"] = confirmedAt
+        }
+        if let participantIds = participantIds {
+            dict["participantIds"] = participantIds
         }
         
         return dict

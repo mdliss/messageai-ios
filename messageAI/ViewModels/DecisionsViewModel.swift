@@ -165,6 +165,174 @@ class DecisionsViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Poll Confirmation
+    
+    /// Confirm poll and create decision
+    /// - Parameters:
+    ///   - decision: The poll to confirm
+    ///   - userId: Current user ID
+    func confirmPoll(decision: AIInsight, userId: String) async {
+        do {
+            print("🎯 confirming poll \(decision.id) for user \(userId)")
+            
+            let insightRef = db.collection("conversations")
+                .document(decision.conversationId)
+                .collection("insights")
+                .document(decision.id)
+            
+            // calculate winning option
+            let votes = decision.metadata?.votes ?? [:]
+            var voteCounts: [String: Int] = [:]
+            
+            for (_, option) in votes {
+                voteCounts[option, default: 0] += 1
+            }
+            
+            let winningOption = voteCounts.max(by: { $0.value < $1.value })?.key ?? "option_1"
+            let voteCount = voteCounts[winningOption] ?? 0
+            
+            print("📊 winning option: \(winningOption) with \(voteCount) votes")
+            
+            // get time options
+            let timeOptions = decision.metadata?.timeOptions ?? []
+            let winningIndex = Int(winningOption.split(separator: "_")[1])! - 1
+            let winningTime = timeOptions[safe: winningIndex] ?? "selected time"
+            
+            print("⏰ winning time: \(winningTime)")
+            
+            // update poll to confirmed
+            try await insightRef.updateData([
+                "metadata.pollStatus": "confirmed",
+                "metadata.winningOption": winningOption,
+                "metadata.winningTime": winningTime,
+                "metadata.confirmedBy": userId,
+                "metadata.confirmedAt": Timestamp(date: Date()),
+                "metadata.finalized": true
+            ])
+            
+            print("✅ poll confirmed successfully")
+            
+            // create decision entry
+            let decisionRef = db.collection("conversations")
+                .document(decision.conversationId)
+                .collection("insights")
+                .document()
+            
+            let totalVotes = votes.count
+            let consensusReached = voteCounts.count == 1 && voteCount == totalVotes
+            
+            let decisionData: [String: Any] = [
+                "id": decisionRef.documentID,
+                "conversationId": decision.conversationId,
+                "type": "decision",
+                "content": "meeting scheduled: \(winningTime)",
+                "metadata": [
+                    "pollId": decision.id,
+                    "winningOption": winningOption,
+                    "winningTime": winningTime,
+                    "voteCount": voteCount,
+                    "totalVotes": totalVotes,
+                    "consensusReached": consensusReached
+                ],
+                "messageIds": decision.messageIds,
+                "triggeredBy": userId,
+                "createdAt": Timestamp(date: Date()),
+                "dismissed": false
+            ]
+            
+            try await decisionRef.setData(decisionData)
+            
+            print("✅ decision entry created: \(decisionRef.documentID)")
+            
+            // post system message
+            let messageRef = db.collection("conversations")
+                .document(decision.conversationId)
+                .collection("messages")
+                .document()
+            
+            let messageData: [String: Any] = [
+                "id": messageRef.documentID,
+                "conversationId": decision.conversationId,
+                "senderId": "ai_assistant",
+                "senderName": "ai assistant",
+                "senderPhotoURL": NSNull(),
+                "type": "text",
+                "text": "✅ poll confirmed! meeting scheduled for:\n\n\(winningTime)\n\n(\(voteCount) of \(totalVotes) votes)",
+                "imageURL": NSNull(),
+                "createdAt": Timestamp(date: Date()),
+                "status": "sent",
+                "deliveredTo": [],
+                "readBy": [],
+                "localId": NSNull(),
+                "isSynced": true,
+                "priority": false
+            ]
+            
+            try await messageRef.setData(messageData)
+            
+            print("✅ system message posted")
+            
+        } catch {
+            errorMessage = "failed to confirm poll: \(error.localizedDescription)"
+            print("❌ failed to confirm poll: \(error.localizedDescription)")
+        }
+    }
+    
+    /// Cancel poll
+    /// - Parameters:
+    ///   - decision: The poll to cancel
+    ///   - userId: Current user ID
+    func cancelPoll(decision: AIInsight, userId: String) async {
+        do {
+            print("🚫 cancelling poll \(decision.id) for user \(userId)")
+            
+            let insightRef = db.collection("conversations")
+                .document(decision.conversationId)
+                .collection("insights")
+                .document(decision.id)
+            
+            // update poll to cancelled
+            try await insightRef.updateData([
+                "metadata.pollStatus": "cancelled",
+                "dismissed": true
+            ])
+            
+            print("✅ poll cancelled successfully")
+            
+            // post system message
+            let messageRef = db.collection("conversations")
+                .document(decision.conversationId)
+                .collection("messages")
+                .document()
+            
+            let messageData: [String: Any] = [
+                "id": messageRef.documentID,
+                "conversationId": decision.conversationId,
+                "senderId": "ai_assistant",
+                "senderName": "ai assistant",
+                "senderPhotoURL": NSNull(),
+                "type": "text",
+                "text": "🚫 poll cancelled by creator",
+                "imageURL": NSNull(),
+                "createdAt": Timestamp(date: Date()),
+                "status": "sent",
+                "deliveredTo": [],
+                "readBy": [],
+                "localId": NSNull(),
+                "isSynced": true,
+                "priority": false
+            ]
+            
+            try await messageRef.setData(messageData)
+            
+            print("✅ cancellation message posted")
+            
+        } catch {
+            errorMessage = "failed to cancel poll: \(error.localizedDescription)"
+            print("❌ failed to cancel poll: \(error.localizedDescription)")
+        }
+    }
+    
     // MARK: - Cleanup
     
     func cleanup() {
@@ -176,6 +344,14 @@ class DecisionsViewModel: ObservableObject {
     deinit {
         decisionsTask?.cancel()
         listeners.forEach { $0.remove() }
+    }
+}
+
+// MARK: - Array Safe Subscript Extension
+
+extension Array {
+    subscript(safe index: Index) -> Element? {
+        return indices.contains(index) ? self[index] : nil
     }
 }
 

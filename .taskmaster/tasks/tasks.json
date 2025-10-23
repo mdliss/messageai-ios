@@ -422,7 +422,17 @@
       "version": "1.0.0",
       "projectName": "MessageAI Critical Implementation",
       "createdAt": "2025-10-23T00:00:00Z",
-      "lastUpdated": "2025-10-23T00:00:00Z"
+      "lastUpdated": "2025-10-23T00:00:00Z",
+      "created": "2025-10-23T15:06:10.135Z",
+      "description": "Tasks for master context"
+    }
+  },
+  "poll-confirmation": {
+    "tasks": [],
+    "metadata": {
+      "created": "2025-10-23T15:06:10.137Z",
+      "updated": "2025-10-23T15:06:10.137Z",
+      "description": "manual poll confirmation feature - allow creators to confirm or cancel polls"
     }
   }
 }

@@ -1,0 +1,122 @@
+{
+  "tags": {
+    "poll-confirmation": {
+      "name": "poll-confirmation",
+      "description": "manual poll confirmation feature - allow creators to confirm or cancel polls",
+      "createdAt": "2025-01-23T00:00:00.000Z",
+      "tasks": [
+        {
+          "id": 1,
+          "title": "update data model for poll status tracking",
+          "description": "add pollStatus, confirmedBy, confirmedAt, and participantIds fields to InsightMetadata struct",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [],
+          "details": "modify messageAI/Models/AIInsight.swift:\n- add pollStatus field: enum PollStatus { active, confirmed, cancelled }\n- add confirmedBy: String? field to track who confirmed\n- add confirmedAt: Date? field for confirmation timestamp\n- add participantIds: [String]? array to track all participants\n- update toDictionary() method to include new fields\n- update init() method to include new fields\n- add these fields to the existing metadata structure without breaking changes",
+          "testStrategy": "verify InsightMetadata compiles\nverify toDictionary includes new fields\nverify backward compatibility with existing polls",
+          "subtasks": []
+        },
+        {
+          "id": 2,
+          "title": "create confirmPoll cloud function",
+          "description": "implement backend function to handle poll confirmation with winner calculation",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [1],
+          "details": "create functions/src/ai/confirmPoll.ts:\n\n1. verify user is poll creator (compare userId to metadata.createdBy)\n2. verify poll status is 'active' (not already confirmed/cancelled)\n3. calculate winning option by counting votes in metadata.votes\n4. handle ties (most votes wins, or first option if truly tied)\n5. update poll document:\n   - pollStatus = 'confirmed'\n   - winningOption = calculated winner\n   - confirmedBy = userId\n   - confirmedAt = serverTimestamp\n6. create new decision document with:\n   - type: 'decision'\n   - content: formatted decision text\n   - metadata.pollId: original poll id\n   - metadata.winningOption\n   - metadata.voteCount\n   - metadata.totalVotes\n   - metadata.consensusReached: boolean\n7. post system message to chat announcing decision\n8. send FCM notifications to all participants\n9. extensive logging at each step\n10. error handling for all edge cases\n\nexport function in functions/src/index.ts",
+          "testStrategy": "test with curl command:\ncurl -X POST [function-url] -d '{\"conversationId\": \"test\", \"pollId\": \"test\", \"userId\": \"test\"}'\nverify poll status updates in firestore\nverify decision document created\nverify system message posted\nverify notifications sent",
+          "subtasks": []
+        },
+        {
+          "id": 3,
+          "title": "create cancelPoll cloud function",
+          "description": "implement backend function to handle poll cancellation with cleanup",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [1],
+          "details": "create functions/src/ai/cancelPoll.ts:\n\n1. verify user is poll creator\n2. verify poll status is 'active'\n3. update poll document:\n   - pollStatus = 'cancelled'\n   - dismissed = true\n4. post optional system message about cancellation\n5. send FCM notifications to all participants\n6. extensive logging\n7. error handling\n\nexport function in functions/src/index.ts",
+          "testStrategy": "test with curl command\nverify poll status updates to cancelled\nverify dismissed flag set to true\nverify notifications sent\nverify poll removed from decisions tab",
+          "subtasks": []
+        },
+        {
+          "id": 4,
+          "title": "modify confirmSchedulingSelection to NOT auto-finalize",
+          "description": "update existing function to record votes without auto-finalizing when all vote",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [1],
+          "details": "modify functions/src/ai/schedulingConfirmation.ts:\n\ncurrent behavior:\n- auto-finalizes when voteCount >= participantIds.length\n\nnew behavior:\n- record vote in poll.metadata.votes (keep this)\n- check if all participants voted (keep this)\n- if all voted:\n  - send message: 'all votes recorded! waiting for creator to confirm'\n  - do NOT finalize\n  - do NOT create decision\n  - do NOT dismiss poll\n- if not all voted:\n  - send message: 'vote recorded! waiting for X more people'\n\nremove lines 142-230 (auto-finalization logic)\nreplace with simple acknowledgment message\nkeep vote recording logic intact",
+          "testStrategy": "create poll with 3 participants\nall 3 vote\nverify poll does NOT auto-finalize\nverify message says 'waiting for creator to confirm'\nverify poll stays active in decisions tab",
+          "subtasks": []
+        },
+        {
+          "id": 5,
+          "title": "add confirm and cancel buttons to PollView",
+          "description": "implement UI buttons with visibility logic and loading states in DecisionsView.swift",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [1, 2, 3],
+          "details": "modify messageAI/Views/Decisions/DecisionsView.swift:\n\n1. add @State variables:\n   - isConfirming: Bool = false\n   - isCancelling: Bool = false\n   - showCancelConfirmation: Bool = false\n   - errorMessage: String? = nil\n\n2. button visibility logic:\n   show buttons when:\n   - currentUserId == decision.metadata.createdBy\n   - decision.metadata.pollStatus == 'active' (or nil for backward compat)\n   - at least 1 vote cast (optional - can show immediately)\n   \n   hide buttons when:\n   - current user is not creator\n   - pollStatus == 'confirmed' or 'cancelled'\n\n3. add button UI after vote options (line ~260):\n   HStack(spacing: 12) {\n     // Confirm Decision button\n     Button {\n       // confirmation logic\n     } label: {\n       HStack {\n         if isConfirming {\n           ProgressView()\n             .progressViewStyle(.circular)\n             .tint(.white)\n         } else {\n           Image(systemName: \"checkmark.circle.fill\")\n         }\n         Text(isConfirming ? \"confirming...\" : \"confirm decision\")\n       }\n       .frame(maxWidth: .infinity)\n       .padding()\n       .background(Color.green)\n       .foregroundColor(.white)\n       .cornerRadius(8)\n     }\n     .disabled(isConfirming || isCancelling)\n     \n     // Cancel Poll button\n     Button {\n       showCancelConfirmation = true\n     } label: {\n       HStack {\n         Image(systemName: \"xmark.circle.fill\")\n         Text(\"cancel poll\")\n       }\n       .frame(maxWidth: .infinity)\n       .padding()\n       .background(Color.red.opacity(0.1))\n       .foregroundColor(.red)\n       .cornerRadius(8)\n       .overlay(\n         RoundedRectangle(cornerRadius: 8)\n           .stroke(Color.red, lineWidth: 2)\n       )\n     }\n     .disabled(isConfirming || isCancelling)\n   }\n   .padding(.vertical, 8)\n\n4. add confirmation dialog:\n   .confirmationDialog(\n     \"cancel poll?\",\n     isPresented: $showCancelConfirmation,\n     titleVisibility: .visible\n   ) {\n     Button(\"cancel poll\", role: .destructive) {\n       // cancellation logic\n     }\n     Button(\"keep poll\", role: .cancel) { }\n   } message: {\n     Text(\"this will remove the poll for all participants\")\n   }\n\n5. participant view (not creator):\n   if decision.metadata.pollStatus == 'active' && currentUserId != createdBy {\n     Text(\"waiting for creator to confirm...\")\n       .font(.subheadline)\n       .foregroundStyle(.secondary)\n       .padding(.vertical, 8)\n   }",
+          "testStrategy": "build and run app\nopen decisions tab\nverify buttons appear for poll creator\nverify buttons DO NOT appear for participants\nverify loading states work\nverify cancel confirmation dialog appears",
+          "subtasks": []
+        },
+        {
+          "id": 6,
+          "title": "implement confirmPoll client logic",
+          "description": "add confirmPoll function to DecisionsViewModel and wire up to button",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [2, 5],
+          "details": "modify messageAI/ViewModels/DecisionsViewModel.swift:\n\n1. add confirmPoll function:\n   func confirmPoll(decision: AIInsight, userId: String) async {\n     do {\n       print(\"🎯 confirming poll \\(decision.id) for user \\(userId)\")\n       \n       let insightRef = db.collection(\"conversations\")\n         .document(decision.conversationId)\n         .collection(\"insights\")\n         .document(decision.id)\n       \n       // calculate winning option\n       let votes = decision.metadata?.votes ?? [:]\n       var voteCounts: [String: Int] = [:]\n       \n       for (_, option) in votes {\n         voteCounts[option, default: 0] += 1\n       }\n       \n       let winningOption = voteCounts.max(by: { $0.value < $1.value })?.key ?? \"option_1\"\n       let voteCount = voteCounts[winningOption] ?? 0\n       \n       print(\"📊 winning option: \\(winningOption) with \\(voteCount) votes\")\n       \n       // get time options\n       let timeOptions = decision.metadata?.timeOptions ?? []\n       let winningIndex = Int(winningOption.split(separator: \"_\")[1])! - 1\n       let winningTime = timeOptions[safe: winningIndex] ?? \"selected time\"\n       \n       // update poll to confirmed\n       try await insightRef.updateData([\n         \"metadata.pollStatus\": \"confirmed\",\n         \"metadata.winningOption\": winningOption,\n         \"metadata.winningTime\": winningTime,\n         \"metadata.confirmedBy\": userId,\n         \"metadata.confirmedAt\": FieldValue.serverTimestamp(),\n         \"metadata.finalized\": true\n       ])\n       \n       print(\"✅ poll confirmed successfully\")\n       \n       // create decision entry\n       let decisionRef = db.collection(\"conversations\")\n         .document(decision.conversationId)\n         .collection(\"insights\")\n         .document()\n       \n       let totalVotes = votes.count\n       let consensusReached = voteCounts.count == 1 && voteCount == totalVotes\n       \n       let decisionData: [String: Any] = [\n         \"id\": decisionRef.documentID,\n         \"conversationId\": decision.conversationId,\n         \"type\": \"decision\",\n         \"content\": \"meeting scheduled: \\(winningTime)\",\n         \"metadata\": [\n           \"pollId\": decision.id,\n           \"winningOption\": winningOption,\n           \"winningTime\": winningTime,\n           \"voteCount\": voteCount,\n           \"totalVotes\": totalVotes,\n           \"consensusReached\": consensusReached\n         ],\n         \"messageIds\": decision.messageIds,\n         \"triggeredBy\": userId,\n         \"createdAt\": FieldValue.serverTimestamp(),\n         \"dismissed\": false\n       ]\n       \n       try await decisionRef.setData(decisionData)\n       \n       print(\"✅ decision entry created: \\(decisionRef.documentID)\")\n       \n       // post system message\n       let messageRef = db.collection(\"conversations\")\n         .document(decision.conversationId)\n         .collection(\"messages\")\n         .document()\n       \n       let messageData: [String: Any] = [\n         \"id\": messageRef.documentID,\n         \"conversationId\": decision.conversationId,\n         \"senderId\": \"ai_assistant\",\n         \"senderName\": \"ai assistant\",\n         \"senderPhotoURL\": NSNull(),\n         \"type\": \"text\",\n         \"text\": \"✅ poll confirmed! meeting scheduled for:\\n\\n\\(winningTime)\\n\\n(\\(voteCount) of \\(totalVotes) votes)\",\n         \"imageURL\": NSNull(),\n         \"createdAt\": FieldValue.serverTimestamp(),\n         \"status\": \"sent\",\n         \"deliveredTo\": [],\n         \"readBy\": [],\n         \"localId\": NSNull(),\n         \"isSynced\": true,\n         \"priority\": false\n       ]\n       \n       try await messageRef.setData(messageData)\n       \n       print(\"✅ system message posted\")\n       \n     } catch {\n       errorMessage = \"failed to confirm poll: \\(error.localizedDescription)\"\n       print(\"❌ failed to confirm poll: \\(error.localizedDescription)\")\n     }\n   }\n\n2. add array safe subscript extension (in Extensions file):\n   extension Array {\n     subscript(safe index: Index) -> Element? {\n       return indices.contains(index) ? self[index] : nil\n     }\n   }\n\n3. wire up button in DecisionsView.swift:\n   Button {\n     Task {\n       guard let userId = authViewModel.currentUser?.id else { return }\n       isConfirming = true\n       await decisionsViewModel.confirmPoll(\n         decision: decision,\n         userId: userId\n       )\n       isConfirming = false\n     }\n   } label: { ... }",
+          "testStrategy": "create poll with 3 users\ncast some votes\ncreator clicks confirm decision\nverify loading spinner shows\nverify poll updates to confirmed\nverify decision entry created\nverify system message posted\nverify UI updates on all devices\ncheck console logs for success messages",
+          "subtasks": []
+        },
+        {
+          "id": 7,
+          "title": "implement cancelPoll client logic",
+          "description": "add cancelPoll function to DecisionsViewModel and wire up to button",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [3, 5],
+          "details": "modify messageAI/ViewModels/DecisionsViewModel.swift:\n\n1. add cancelPoll function:\n   func cancelPoll(decision: AIInsight, userId: String) async {\n     do {\n       print(\"🚫 cancelling poll \\(decision.id) for user \\(userId)\")\n       \n       let insightRef = db.collection(\"conversations\")\n         .document(decision.conversationId)\n         .collection(\"insights\")\n         .document(decision.id)\n       \n       // update poll to cancelled\n       try await insightRef.updateData([\n         \"metadata.pollStatus\": \"cancelled\",\n         \"dismissed\": true\n       ])\n       \n       print(\"✅ poll cancelled successfully\")\n       \n       // post system message (optional)\n       let messageRef = db.collection(\"conversations\")\n         .document(decision.conversationId)\n         .collection(\"messages\")\n         .document()\n       \n       let messageData: [String: Any] = [\n         \"id\": messageRef.documentID,\n         \"conversationId\": decision.conversationId,\n         \"senderId\": \"ai_assistant\",\n         \"senderName\": \"ai assistant\",\n         \"senderPhotoURL\": NSNull(),\n         \"type\": \"text\",\n         \"text\": \"🚫 poll cancelled by creator\",\n         \"imageURL\": NSNull(),\n         \"createdAt\": FieldValue.serverTimestamp(),\n         \"status\": \"sent\",\n         \"deliveredTo\": [],\n         \"readBy\": [],\n         \"localId\": NSNull(),\n         \"isSynced\": true,\n         \"priority\": false\n       ]\n       \n       try await messageRef.setData(messageData)\n       \n       print(\"✅ cancellation message posted\")\n       \n     } catch {\n       errorMessage = \"failed to cancel poll: \\(error.localizedDescription)\"\n       print(\"❌ failed to cancel poll: \\(error.localizedDescription)\")\n     }\n   }\n\n2. wire up button in DecisionsView.swift:\n   .confirmationDialog(\n     \"cancel poll?\",\n     isPresented: $showCancelConfirmation,\n     titleVisibility: .visible\n   ) {\n     Button(\"cancel poll\", role: .destructive) {\n       Task {\n         guard let userId = authViewModel.currentUser?.id else { return }\n         isCancelling = true\n         await decisionsViewModel.cancelPoll(\n           decision: decision,\n           userId: userId\n         )\n         isCancelling = false\n       }\n     }\n     Button(\"keep poll\", role: .cancel) { }\n   } message: {\n     Text(\"this will remove the poll for all participants\")\n   }",
+          "testStrategy": "create poll with 3 users\ncast some votes\ncreator clicks cancel poll\nverify confirmation dialog appears\nconfirm cancellation\nverify poll disappears from decisions tab\nverify system message posted\nverify UI updates on all devices\ncheck console logs",
+          "subtasks": []
+        },
+        {
+          "id": 8,
+          "title": "add real-time sync for poll status changes",
+          "description": "ensure all devices receive poll status updates within 2 seconds",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [6, 7],
+          "details": "modify messageAI/ViewModels/DecisionsViewModel.swift:\n\ncurrent: real-time listener on insights collection already exists (line 52-96)\n\nverify listener handles:\n1. pollStatus field changes (active → confirmed → cancelled)\n2. finalized field changes\n3. winningOption field changes\n4. new decision documents created\n\nthe existing listener should automatically update decisions array when:\n- poll is confirmed (pollStatus changes)\n- poll is cancelled (dismissed = true)\n- decision entry created (new document in insights)\n\nno changes needed if existing listener works\ntest real-time updates:\n- device A confirms poll\n- device B should see update within 2 seconds\n- device C should see update within 2 seconds\n\nif updates are slow, check:\n- firestore indexes\n- network latency\n- listener registration\n- UI update on main thread",
+          "testStrategy": "open decisions tab on 3 simulators\ncreator confirms poll on device 1\nverify devices 2 and 3 update within 2 seconds\nmeasure latency with timestamps in console logs\nrepeat for cancellation\nverify vote updates also sync in real-time",
+          "subtasks": []
+        },
+        {
+          "id": 9,
+          "title": "comprehensive testing with iOS Simulator MCP",
+          "description": "run all 7 test cases with 3 simulators and capture screenshots",
+          "status": "pending",
+          "priority": "high",
+          "dependencies": [8],
+          "details": "use iOS Simulator MCP to test:\n\ntest 1: full consensus\n- 3 simulators: user a (creator), user b, user c\n- create group chat with all 3\n- user a creates poll with 3 time options\n- all users vote for same option\n- verify user a sees confirm/cancel buttons\n- verify users b and c see 'waiting for creator' message\n- verify users b and c do NOT see buttons\n- user a clicks confirm decision\n- verify toast notification on all 3 devices\n- verify decision entry appears in all 3 decisions tabs\n- verify poll shows as confirmed on all devices\n- take screenshots showing flow on all 3 devices\n\ntest 2: cancel poll\n- same 3 simulators\n- user a creates poll\n- users b and c cast votes\n- user a clicks cancel poll\n- verify confirmation dialog appears\n- user a confirms cancellation\n- verify toast notification on all devices\n- verify poll disappears from decisions tab\n- take screenshots of cancellation flow\n\ntest 3: partial voting\n- user a creates poll\n- only users a and b vote (user c doesn't vote)\n- user a should still see confirm/cancel buttons\n- user a confirms decision\n- verify decision shows '2/3 participants voted'\n- take screenshots showing partial vote confirmation\n\ntest 4: tied votes\n- user a creates poll with 3 options\n- each user votes for different option (3-way tie)\n- user a sees confirm/cancel buttons\n- user a can confirm any option (acts as tiebreaker)\n- verify decision records which option was chosen\n- take screenshots\n\ntest 5: creator confirms immediately\n- user a creates poll\n- user a immediately clicks confirm decision before anyone votes\n- verify it works and creates decision with '1/3 votes'\n- users b and c see confirmed decision, can't vote anymore\n- take screenshots\n\ntest 6: real-time sync\n- all 3 simulators have decisions tab open simultaneously\n- user a creates poll\n- verify it appears on all devices within 2 seconds (check timestamps)\n- user b casts vote\n- verify vote count updates on all devices in real-time\n- user a confirms\n- verify UI updates to confirmed state on all devices immediately\n- take screenshots showing real-time sync working\n\ntest 7: multiple polls\n- user a creates poll 1 about meeting time\n- user a creates poll 2 about lunch location\n- verify both polls visible in decisions tab\n- users b and c vote on both polls\n- user a confirms poll 1\n- verify poll 2 still active\n- user a confirms poll 2\n- verify both show as confirmed decisions\n- take screenshots\n\ndocument results:\n- all screenshots in docs/screenshots/poll_confirmation/\n- create docs/POLL_CONFIRMATION_TEST_RESULTS.md\n- list any bugs found\n- verify all acceptance criteria met",
+          "testStrategy": "run each test case systematically\ncapture screenshots at each step\nverify no console errors\nverify no crashes\nverify all acceptance criteria pass\ndocument any issues found\ncreate summary report",
+          "subtasks": []
+        },
+        {
+          "id": 10,
+          "title": "update documentation and create completion summary",
+          "description": "update architecture docs and create implementation summary",
+          "status": "pending",
+          "priority": "medium",
+          "dependencies": [9],
+          "details": "1. update docs/architecture.md:\n   - add section on manual poll confirmation\n   - document poll lifecycle: create → vote → confirm → decision\n   - document cancellation flow\n   - document data model changes\n   - add diagrams showing button visibility logic\n   - document edge cases and how they're handled\n\n2. create docs/POLL_CONFIRMATION_COMPLETE.md:\n   - feature overview\n   - implementation details\n   - files modified list\n   - data model changes\n   - UI changes with screenshots\n   - testing results summary\n   - edge cases handled\n   - known limitations (if any)\n   - future enhancements\n\n3. update README.md:\n   - add manual poll confirmation to features list\n   - add screenshots showing feature\n\n4. create video demo (optional):\n   - record simulator showing feature working\n   - show creator and participant views\n   - show confirmation and cancellation\n   - upload to docs/videos/",
+          "testStrategy": "verify all documentation is accurate\nverify screenshots are clear\nverify implementation summary is complete\nask colleague to review docs for clarity",
+          "subtasks": []
+        }
+      ]
+    }
+  }
+}
+
