@@ -12,6 +12,7 @@ import FirebaseAuth
 struct ChatView: View {
     let conversation: Conversation
     let currentUserId: String
+    let scrollToMessageId: String?
     
     @StateObject private var viewModel = ChatViewModel()
     @StateObject private var aiViewModel = AIInsightsViewModel()
@@ -24,7 +25,14 @@ struct ChatView: View {
     @State private var showActionItems = false  // Action items panel
     @State private var onlineStatuses: [String: Bool] = [:]  // Track online status per user
     @State private var presenceListeners: [String: Task<Void, Never>] = [:]
+    @State private var highlightedMessageId: String? = nil
     @Environment(\.dismiss) private var dismiss
+    
+    init(conversation: Conversation, currentUserId: String, scrollToMessageId: String? = nil) {
+        self.conversation = conversation
+        self.currentUserId = currentUserId
+        self.scrollToMessageId = scrollToMessageId
+    }
     
     private let realtimeDBService = RealtimeDBService.shared
     
@@ -113,7 +121,8 @@ struct ChatView: View {
                         MessageBubbleView(
                             message: message,
                             isFromCurrentUser: message.isFromCurrentUser(userId: currentUserId),
-                            showSenderName: conversation.type == .group
+                            showSenderName: conversation.type == .group,
+                            isHighlighted: highlightedMessageId == message.id
                         )
                         .id(message.id)
                         .listRowSeparator(.hidden)
@@ -172,9 +181,33 @@ struct ChatView: View {
                     }
                 }
                 .onAppear {
-                    // Scroll to bottom on appear
-                    if let lastMessage = viewModel.messages.last {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    // If scrollToMessageId is provided, scroll to that message and highlight it
+                    if let targetMessageId = scrollToMessageId {
+                        // Small delay to ensure messages are loaded
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            print("🎯 Scrolling to message: \(targetMessageId)")
+                            
+                            // Scroll to the message
+                            proxy.scrollTo(targetMessageId, anchor: .center)
+                            
+                            // Highlight the message
+                            highlightedMessageId = targetMessageId
+                            
+                            // Auto-fade highlight after 2.5 seconds
+                            Task {
+                                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                                await MainActor.run {
+                                    withAnimation(.easeOut(duration: 0.5)) {
+                                        highlightedMessageId = nil
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Normal behavior: Scroll to bottom on appear
+                        if let lastMessage = viewModel.messages.last {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
                     }
                 }
             }
@@ -550,7 +583,8 @@ struct FullScreenImageView: View {
                     "user2": ParticipantDetail(displayName: "Alice Smith")
                 ]
             ),
-            currentUserId: "user1"
+            currentUserId: "user1",
+            scrollToMessageId: nil
         )
     }
 }

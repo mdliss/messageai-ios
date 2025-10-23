@@ -13,6 +13,8 @@ struct PriorityFilterView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = PriorityFilterViewModel()
     @State private var selectedPriority: MessagePriority? = nil
+    @State private var selectedConversation: Conversation? = nil
+    @State private var scrollToMessageId: String? = nil
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -74,10 +76,15 @@ struct PriorityFilterView: View {
                         ForEach(groupedByConversation(), id: \.key) { conversationId, messages in
                             Section {
                                 ForEach(messages) { priorityMessage in
-                                    PriorityMessageRow(
-                                        message: priorityMessage.message,
-                                        conversationName: viewModel.conversationNames[conversationId] ?? "Unknown"
-                                    )
+                                    Button {
+                                        handleMessageTap(priorityMessage)
+                                    } label: {
+                                        PriorityMessageRow(
+                                            message: priorityMessage.message,
+                                            conversationName: viewModel.conversationNames[conversationId] ?? "Unknown"
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             } header: {
                                 Text(viewModel.conversationNames[conversationId] ?? "Unknown")
@@ -107,6 +114,46 @@ struct PriorityFilterView: View {
                 if let userId = authViewModel.currentUser?.id {
                     viewModel.loadPriorityMessages(userId: userId)
                 }
+            }
+            .navigationDestination(item: $selectedConversation) { conversation in
+                if let currentUserId = authViewModel.currentUser?.id {
+                    ChatView(
+                        conversation: conversation,
+                        currentUserId: currentUserId,
+                        scrollToMessageId: scrollToMessageId
+                    )
+                }
+            }
+        }
+    }
+    
+    // MARK: - Handle Message Tap
+    
+    private func handleMessageTap(_ priorityMessage: PriorityMessage) {
+        print("🎯 Tapped priority message: \(priorityMessage.message.text)")
+        print("   Conversation ID: \(priorityMessage.conversationId)")
+        print("   Message ID: \(priorityMessage.message.id)")
+        
+        // Find the conversation from viewModel
+        Task {
+            do {
+                let db = FirebaseConfig.shared.db
+                let conversationDoc = try await db.collection("conversations").document(priorityMessage.conversationId).getDocument()
+                
+                guard let conversation = try? conversationDoc.data(as: Conversation.self) else {
+                    print("❌ Failed to load conversation for priority message")
+                    return
+                }
+                
+                // Set navigation state
+                await MainActor.run {
+                    scrollToMessageId = priorityMessage.message.id
+                    selectedConversation = conversation
+                }
+                
+                print("✅ Navigating to conversation with scroll to message: \(priorityMessage.message.id)")
+            } catch {
+                print("❌ Error loading conversation: \(error.localizedDescription)")
             }
         }
     }

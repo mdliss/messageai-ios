@@ -1,0 +1,537 @@
+# Priority Messages Navigation and Profile Editing PRD
+
+## Overview
+Implement two critical user experience features for MessageAI iOS app: make priority messages clickable with navigation to source conversation, and enable full profile editing including display name and profile picture (both built-in avatars and photo library uploads) with real-time sync.
+
+## Problem Statement
+
+### Issue #1: Priority Messages Not Clickable
+Users can view urgent and important messages in priority filter view but cannot tap them to navigate to the source conversation. This makes the priority filter much less useful as users must manually search through conversations to find urgent messages.
+
+### Issue #2: Profile Editing Missing
+Users cannot edit their display name or profile picture. Profile screen shows static information with no editing capabilities, preventing users from personalizing their account.
+
+## User Stories
+
+### Priority Messages Navigation
+- As a user, I want to tap on a priority message in the priority filter to navigate directly to that message in its conversation
+- As a user, I want the conversation to scroll to the specific urgent/important message automatically
+- As a user, I want the message to be highlighted so I know which one triggered the priority flag
+- As a user, I want to easily navigate back to the priority filter after viewing the message
+
+### Profile Editing
+- As a user, I want to edit my display name by tapping on it
+- As a user, I want to choose from built-in avatars instantly without uploading
+- As a user, I want to upload a custom photo from my library
+- As a user, I want my profile changes to appear immediately for all other users in conversations
+- As a user, I want to see real-time updates when other users change their names/pictures
+
+## Technical Requirements
+
+### Feature 1: Priority Messages Navigation
+
+#### Current Implementation Analysis
+- PriorityFilterView displays priority messages in sections grouped by conversation
+- Each message shown via PriorityMessageRow component
+- PriorityMessage struct contains: id, message (Message), conversationId
+- Message model has: id, conversationId, all message data
+- App uses NavigationStack for navigation
+- ChatView has ScrollViewReader for message scrolling
+- ChatView scrolls to message.id using proxy.scrollTo()
+
+#### Implementation Requirements
+
+1. Make Priority Messages Tappable
+   - Wrap PriorityMessageRow in Button or add tap gesture
+   - Extract conversationId and messageId from tapped message
+   - Store target conversationId and messageId in navigation state
+
+2. Navigate to Conversation
+   - Use NavigationStack's navigationDestination with conversation binding
+   - Pass Conversation object and highlight messageId to ChatView
+   - Ensure ChatView can receive optional highlightMessageId parameter
+
+3. Scroll to Specific Message
+   - Add optional scrollToMessageId parameter to ChatView
+   - In onAppear/onChange, detect scrollToMessageId and scroll using ScrollViewReader
+   - Use proxy.scrollTo(messageId, anchor: .center) for better visibility
+   - Add small delay if needed to ensure messages loaded first
+
+4. Highlight Message
+   - Add @State highlightedMessageId in ChatView
+   - In MessageBubbleView, detect if message.id == highlightedMessageId
+   - Apply subtle background overlay (e.g., .yellow.opacity(0.2))
+   - Auto-fade highlight after 2-3 seconds using Task.sleep
+
+5. Back Navigation
+   - Ensure standard back button returns to PriorityFilterView
+   - Preserve scroll position and filter state in PriorityFilterView
+
+#### Edge Cases
+- Message deleted: Show toast and don't navigate
+- Conversation deleted: Show error and remove from priority list
+- Very long conversation: Ensure scroll works efficiently
+- Multiple priority messages same conversation: Each navigates to correct message
+
+### Feature 2: Profile Editing
+
+#### Current Implementation Analysis
+- ProfileView displays user info from authViewModel.currentUser
+- User model has: id, email, displayName, photoURL, isOnline, preferences
+- AuthViewModel manages currentUser state
+- Firebase Storage configured and ready (StorageService.swift)
+- Storage rules allow users to write to users/{userId}/ path
+- Firestore users collection stores user data
+- Real-time listeners update conversations when user data changes
+
+#### Implementation Requirements - Display Name Editing
+
+1. Make Display Name Editable
+   - Add edit icon or tap gesture to display name text
+   - Present editing UI (inline TextField or Sheet)
+   - Preferred: Inline TextField with "Save" button for simplicity
+
+2. Input Validation
+   - Non-empty validation
+   - Character limit: 1-50 characters
+   - Trim whitespace
+   - Show validation errors inline
+
+3. Save to Firestore
+   - Update users/{userId}.displayName field
+   - Show loading state while saving
+   - Handle errors gracefully with retry option
+   - Update authViewModel.currentUser immediately on success
+
+4. Real-Time Sync
+   - Firestore listeners propagate changes to all users
+   - Update conversation participant details
+   - Update sender names on messages
+   - Changes appear within 2-3 seconds for other users
+
+#### Implementation Requirements - Profile Picture Editing
+
+1. Make Profile Picture Editable
+   - Add edit icon overlay on picture
+   - On tap, present selection sheet with two options:
+     a) Choose from Built-in Avatars
+     b) Upload from Photo Library
+
+2. Built-in Avatars System
+   - Create 15-20 pre-designed avatar options
+   - Options: colored circles, gradients, geometric patterns, icon sets
+   - Store avatars as SF Symbols or simple SwiftUI shapes
+   - Display in LazyVGrid (3 columns)
+   - On selection:
+     * Highlight selected avatar
+     * Save avatarType = "built_in" to Firestore
+     * Save avatarId (e.g., "avatar_blue_circle") to Firestore
+     * Update UI immediately (no upload needed)
+     * No photoURL needed for built-in avatars
+
+3. Photo Library Upload
+   - Request photo library permission
+   - If denied: Show alert with Settings button
+   - If granted: Present PhotosPicker
+   - Allow single image selection
+   - Compress image to <1MB using ImageCompressor
+   - Upload to Firebase Storage: users/{userId}/profile.jpg
+   - Get download URL from Storage
+   - Update Firestore:
+     * avatarType = "custom"
+     * photoURL = download URL
+   - Show upload progress indicator
+   - Update UI after successful upload
+   - Handle upload failures with retry option
+
+4. Avatar Display Logic
+   - If avatarType == "built_in": Display avatar using avatarId from assets
+   - If avatarType == "custom": Load image from photoURL
+   - Fallback to text avatar (first letter) if load fails
+   - Cache images for performance
+
+5. Real-Time Sync
+   - Firestore listeners propagate picture changes
+   - Update conversation participant details
+   - Update sender pictures on messages
+   - Changes appear within 2-3 seconds for custom photos
+   - Instant for built-in avatars (no upload delay)
+
+#### Data Model Updates
+
+Add to User model:
+```swift
+var avatarType: AvatarType? = nil  // "built_in" or "custom"
+var avatarId: String? = nil  // For built-in avatars: "avatar_blue_circle", etc.
+```
+
+Create AvatarType enum:
+```swift
+enum AvatarType: String, Codable {
+    case builtIn = "built_in"
+    case custom = "custom"
+}
+```
+
+#### Built-in Avatar Options (Minimum 15)
+1. Blue Circle
+2. Red Circle
+3. Green Circle
+4. Purple Circle
+5. Orange Circle
+6. Blue Gradient
+7. Purple Gradient
+8. Green Gradient
+9. Red Gradient
+10. Orange Gradient
+11. Geometric Pattern 1 (Triangles)
+12. Geometric Pattern 2 (Hexagons)
+13. Geometric Pattern 3 (Stripes)
+14. SF Symbol: Person
+15. SF Symbol: Star
+16. SF Symbol: Heart
+17. SF Symbol: Circle.Grid
+18. SF Symbol: Square.Grid
+19. SF Symbol: Diamond
+20. SF Symbol: Moon
+
+## User Experience Flow
+
+### Priority Message Navigation Flow
+1. User opens priority messages filter (flag icon)
+2. Sees urgent/important messages grouped by conversation
+3. User taps on "Urgent please do this now!!!" message
+4. App navigates to Test3 conversation
+5. Conversation opens scrolled to urgent message
+6. Message highlighted with subtle yellow background
+7. Highlight fades after 2 seconds
+8. User reads message and responds
+9. User taps back to return to priority filter
+10. Priority filter state preserved (scroll position, selected filter)
+
+### Display Name Editing Flow
+1. User taps profile tab
+2. Sees current display name: "Test2"
+3. User taps edit icon next to name
+4. Inline TextField appears with "Test2" pre-filled
+5. User types "Sarah Chen"
+6. User taps "Save" button
+7. Loading indicator appears
+8. Name updates to "Sarah Chen" in profile
+9. Name syncs to Firestore
+10. All other users see "Sarah Chen" in conversations within 2-3 seconds
+11. All messages from user show "Sarah Chen" as sender
+
+### Profile Picture - Built-in Avatar Flow
+1. User taps profile picture
+2. Selection sheet appears with two sections
+3. User taps "Choose from Built-in Avatars"
+4. Grid of 20 avatar options appears
+5. User taps blue gradient avatar
+6. Avatar highlights as selected
+7. User taps "Done"
+8. Profile picture updates instantly to blue gradient
+9. Change syncs to Firestore (avatarType, avatarId)
+10. All other users see blue gradient avatar in conversations
+11. Update appears instantly (no upload needed)
+
+### Profile Picture - Photo Library Flow
+1. User taps profile picture
+2. Selection sheet appears
+3. User taps "Upload from Photo Library"
+4. Photo library permission requested
+5. User grants permission
+6. Photo picker opens
+7. User selects image
+8. Image compressed automatically
+9. Upload progress indicator shows
+10. Image uploads to Firebase Storage
+11. Profile picture updates after upload
+12. Change syncs to Firestore (avatarType, photoURL)
+13. All other users see custom photo in conversations
+14. Update appears within 2-3 seconds
+
+## Success Criteria
+
+### Priority Messages Navigation
+- Every priority message is tappable
+- Tapping navigates to correct conversation instantly
+- Conversation scrolls to exact message (within viewport)
+- Message highlighted clearly but not jarring
+- Back navigation returns to priority filter
+- Works for both urgent and important messages
+- Works in one-on-one and group conversations
+- Handles edge cases gracefully (deleted messages, etc.)
+
+### Display Name Editing
+- Display name editable via tap or edit icon
+- Input validation prevents empty names
+- Save succeeds and updates Firestore
+- Loading state shown during save
+- Errors handled with retry option
+- Name updates immediately in profile
+- Name propagates to all conversations within 2-3 seconds
+- Other users see new name on messages
+
+### Profile Picture - Built-in Avatars
+- 15-20 diverse avatar options available
+- Grid layout with 3 columns
+- Selection highlights clearly
+- Update happens instantly (no upload)
+- avatarType and avatarId saved to Firestore
+- Avatar appears immediately in profile
+- Avatar propagates to all conversations instantly
+- No permissions needed
+
+### Profile Picture - Photo Library
+- Photo library permission requested when needed
+- Permission denied handled gracefully
+- Photo picker allows single image selection
+- Images compressed before upload (<1MB)
+- Upload progress shown clearly
+- Upload failures handled with retry
+- avatarType and photoURL saved to Firestore
+- Custom photo appears in profile after upload
+- Custom photo propagates to conversations within 2-3 seconds
+- Can switch between built-in and custom freely
+
+### Real-Time Sync
+- All profile changes sync via Firestore listeners
+- Name changes appear in conversation lists
+- Name changes appear on message bubbles
+- Picture changes appear in conversation lists
+- Picture changes appear on message bubbles
+- Built-in avatar changes instant
+- Custom photo changes within 2-3 seconds
+- No app restart needed
+- Works across multiple devices simultaneously
+
+## Technical Constraints
+
+### iOS Requirements
+- iOS 17.0+ (current app target)
+- SwiftUI for all UI components
+- Combine for reactive programming
+- Firebase SDK for backend
+
+### Firebase Limits
+- Storage: 5GB free tier (sufficient for profile pictures)
+- Firestore: Real-time updates (no additional cost for listeners)
+- Storage uploads: Max 10MB per file (compress to <1MB)
+
+### Performance Requirements
+- Priority message navigation: <500ms from tap to conversation open
+- Message scroll: <300ms to scroll to target message
+- Name save: <2s from tap to Firestore update
+- Built-in avatar: Instant (no network delay)
+- Photo upload: <5s for compressed <1MB image
+- Real-time sync: <3s for other users to see changes
+
+## Security Considerations
+
+### Profile Editing
+- Users can only edit their own profile
+- Firestore rules enforce userId == auth.uid for writes
+- Photo library permission requested with clear explanation
+- Uploaded images stored in users/{userId}/ (isolated)
+- Image compression prevents large file attacks
+
+### Data Validation
+- Display name: 1-50 characters, no special validation needed
+- Avatar type: Enum validation (builtIn or custom)
+- Avatar ID: Validated against known avatar IDs
+- Photo URL: Validated Firebase Storage URL
+
+## Testing Requirements
+
+### Manual Testing with Simulators
+
+#### Test 1: Priority Message Navigation - Same Conversation
+1. Launch 2 simulators (iPhone 17 Pro)
+2. User A sends urgent message
+3. User B opens priority filter
+4. User B taps urgent message
+5. Verify: Navigation to conversation
+6. Verify: Scroll to message
+7. Verify: Message highlighted
+8. Verify: Back navigation works
+
+#### Test 2: Priority Message Navigation - Multiple Conversations
+1. Launch 3 simulators
+2. Create messages in multiple conversations
+3. User C opens priority filter
+4. Sees multiple urgent messages
+5. Taps each one
+6. Verify: Navigates to correct conversation each time
+7. Verify: Scrolls to correct message each time
+
+#### Test 3: Display Name Editing with Real-Time Sync
+1. Launch 3 simulators in group chat
+2. User A edits name from "Test2" to "Sarah Chen"
+3. Verify: Profile updates immediately for User A
+4. Verify: Users B and C see "Sarah Chen" in conversation list
+5. Verify: User A's messages show "Sarah Chen"
+6. Verify: Update happens within 2-3 seconds
+
+#### Test 4: Built-in Avatar Selection
+1. User A taps profile picture
+2. Selects "Choose from Built-in Avatars"
+3. Grid of 20 avatars appears
+4. Taps blue gradient avatar
+5. Verify: Avatar updates instantly in profile
+6. Verify: Avatar appears in all conversations immediately
+7. Verify: No upload delay
+
+#### Test 5: Photo Library Upload
+1. User A taps profile picture
+2. Selects "Upload from Photo Library"
+3. Permission requested and granted
+4. Selects large image (5MB)
+5. Verify: Image compressed
+6. Verify: Upload progress shown
+7. Verify: Profile picture updates after upload
+8. Verify: Other users see custom photo within 2-3 seconds
+
+#### Test 6: Switch Between Avatar Types
+1. User A selects built-in avatar (red circle)
+2. Verify instant update across devices
+3. User A uploads custom photo
+4. Verify replaces built-in avatar
+5. User A switches back to different built-in avatar (blue gradient)
+6. Verify instant update again
+
+#### Test 7: Edge Cases
+1. Empty name validation
+2. Very long name (>50 chars)
+3. Photo library permission denied
+4. Upload failure (network error)
+5. Large image handling (>10MB)
+6. Deleted priority message
+7. Deleted conversation with priority message
+
+## Implementation Timeline
+
+### Phase 1: Priority Messages Navigation (Day 1)
+- Make PriorityMessageRow tappable
+- Add navigation to ChatView
+- Implement scroll to message
+- Add message highlighting
+- Test navigation flow
+
+### Phase 2: Display Name Editing (Day 1)
+- Add edit UI to ProfileView
+- Implement input validation
+- Save to Firestore
+- Test real-time sync
+
+### Phase 3: Built-in Avatars (Day 2)
+- Design/create 20 avatar options
+- Build avatar selection UI
+- Implement avatar selection logic
+- Save avatarType and avatarId to Firestore
+- Test real-time sync
+
+### Phase 4: Photo Library Upload (Day 2)
+- Request photo library permissions
+- Integrate PhotosPicker
+- Compress images
+- Upload to Firebase Storage
+- Save photoURL to Firestore
+- Test upload flow and sync
+
+### Phase 5: Testing and Polish (Day 3)
+- Run all test cases on 3 simulators
+- Fix any bugs
+- Add logging for debugging
+- Take comprehensive screenshots
+- Update documentation
+
+## Dependencies
+
+### Existing Code
+- PriorityFilterView.swift (modify for navigation)
+- PriorityFilterViewModel.swift (no changes needed)
+- ChatView.swift (add scroll to message parameter)
+- ProfileView.swift (add editing capabilities)
+- User.swift (add avatarType and avatarId fields)
+- AuthViewModel.swift (update user profile methods)
+- StorageService.swift (use for image uploads)
+
+### New Code Needed
+- ProfileEditingViewModel.swift (manage profile updates)
+- AvatarSelectionView.swift (built-in avatar grid)
+- BuiltInAvatars.swift (avatar definitions and rendering)
+
+### Firebase Services
+- Firestore (users collection updates)
+- Firebase Storage (profile picture uploads)
+- Real-time listeners (propagate changes)
+
+## Rollout Plan
+
+### Development
+1. Create feature branch: feature/priority-nav-profile-edit
+2. Implement priority navigation first (smaller scope)
+3. Implement profile editing features
+4. Test thoroughly on simulators
+5. Create pull request with screenshots
+
+### Testing
+1. Test all flows on 3 simulators
+2. Verify real-time sync across devices
+3. Test edge cases and error handling
+4. Performance testing (navigation speed, upload time)
+5. Document any issues found
+
+### Deployment
+1. Merge to main after review
+2. Deploy to TestFlight for beta testing
+3. Monitor Firebase Storage usage
+4. Monitor Firestore read/write costs
+5. Gather user feedback
+
+## Success Metrics
+
+### Priority Messages Navigation
+- 100% of priority messages clickable
+- <500ms navigation time
+- <300ms scroll time
+- 0 navigation errors in testing
+- Users can navigate back 100% of time
+
+### Profile Editing
+- 100% success rate for name updates
+- 100% success rate for built-in avatar selection
+- >90% success rate for photo uploads (accounting for network issues)
+- <2s average name save time
+- <5s average photo upload time
+- <3s real-time sync for other users
+
+## Open Questions
+
+1. Should we add image cropping for photo library uploads?
+   - Decision: Optional for MVP, can add later if needed
+   - Compression is mandatory
+
+2. Should we allow users to remove profile picture (back to text avatar)?
+   - Decision: Yes, add "Remove Picture" option in selection sheet
+
+3. Should we validate display names (profanity filter, etc.)?
+   - Decision: No for MVP, basic length validation only
+
+4. Should we cache built-in avatars locally?
+   - Decision: No need, they're generated with SwiftUI/SF Symbols
+
+5. Should we show who's viewing the priority message?
+   - Decision: No for MVP, focus on navigation
+
+## Conclusion
+
+This PRD covers two essential user experience features:
+1. Making priority messages navigable to their source conversations
+2. Enabling full profile editing with name and picture updates
+
+Both features follow KISS principles (simple, direct solutions), DRY principles (reuse existing navigation and Firebase services), and iOS best practices (standard components, real-time sync, proper permissions).
+
+Implementation is straightforward with existing architecture and should take 2-3 days including thorough testing.
+

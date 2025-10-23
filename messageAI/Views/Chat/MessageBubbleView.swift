@@ -12,6 +12,7 @@ struct MessageBubbleView: View {
     let message: Message
     let isFromCurrentUser: Bool
     let showSenderName: Bool
+    var isHighlighted: Bool = false
     
     @ObservedObject private var networkMonitor = NetworkMonitor.shared
     
@@ -152,6 +153,11 @@ struct MessageBubbleView: View {
             }
         }
         .padding(.vertical, 2)
+        .background(
+            // Highlight background for priority message navigation
+            isHighlighted ? Color.yellow.opacity(0.2) : Color.clear
+        )
+        .cornerRadius(8)
     }
     
     // MARK: - Text Bubble
@@ -306,7 +312,8 @@ struct MessageBubbleView: View {
                 status: .read
             ),
             isFromCurrentUser: false,
-            showSenderName: true
+            showSenderName: true,
+            isHighlighted: false
         )
         
         MessageBubbleView(
@@ -318,7 +325,8 @@ struct MessageBubbleView: View {
                 status: .delivered
             ),
             isFromCurrentUser: true,
-            showSenderName: false
+            showSenderName: false,
+            isHighlighted: false
         )
         
         MessageBubbleView(
@@ -331,7 +339,8 @@ struct MessageBubbleView: View {
                 priority: .urgent
             ),
             isFromCurrentUser: false,
-            showSenderName: true
+            showSenderName: true,
+            isHighlighted: true
         )
         
         MessageBubbleView(
@@ -344,7 +353,8 @@ struct MessageBubbleView: View {
                 priority: .high
             ),
             isFromCurrentUser: false,
-            showSenderName: true
+            showSenderName: true,
+            isHighlighted: false
         )
     }
     .padding()

@@ -9,12 +9,20 @@
 import Foundation
 import FirebaseAuth
 
+/// Avatar type enum
+enum AvatarType: String, Codable {
+    case builtIn = "built_in"
+    case custom = "custom"
+}
+
 /// User model representing a user in the MessageAI system
 struct User: Codable, Identifiable, Equatable {
     let id: String
     let email: String
-    let displayName: String
+    var displayName: String
     let photoURL: String?
+    var avatarType: AvatarType?
+    var avatarId: String?
     var isOnline: Bool
     var lastSeen: Date
     var fcmToken: String?
@@ -27,6 +35,8 @@ struct User: Codable, Identifiable, Equatable {
         self.email = firebaseUser.email ?? ""
         self.displayName = firebaseUser.displayName ?? User.generateDisplayName(from: firebaseUser.email ?? "")
         self.photoURL = firebaseUser.photoURL?.absoluteString
+        self.avatarType = nil
+        self.avatarId = nil
         self.isOnline = true
         self.lastSeen = Date()
         self.fcmToken = nil
@@ -36,12 +46,15 @@ struct User: Codable, Identifiable, Equatable {
     
     /// Initialize with all parameters
     init(id: String, email: String, displayName: String, photoURL: String? = nil,
+         avatarType: AvatarType? = nil, avatarId: String? = nil,
          isOnline: Bool = false, lastSeen: Date = Date(), fcmToken: String? = nil,
          createdAt: Date = Date(), preferences: UserPreferences = UserPreferences()) {
         self.id = id
         self.email = email
         self.displayName = displayName
         self.photoURL = photoURL
+        self.avatarType = avatarType
+        self.avatarId = avatarId
         self.isOnline = isOnline
         self.lastSeen = lastSeen
         self.fcmToken = fcmToken
