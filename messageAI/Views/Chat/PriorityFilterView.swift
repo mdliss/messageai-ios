@@ -17,19 +17,9 @@ struct PriorityFilterView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Priority filter pills
+            VStack(alignment: .leading, spacing: 0) {
+                // Priority filter pills - FIXED: Only 2 buttons, always at top
                 HStack(spacing: 12) {
-                    FilterPill(
-                        title: "all priority",
-                        icon: "flag.fill",
-                        color: .purple,
-                        isSelected: selectedPriority == nil,
-                        count: viewModel.allPriorityMessages.count
-                    ) {
-                        selectedPriority = nil
-                    }
-                    
                     FilterPill(
                         title: "urgent",
                         icon: "exclamationmark.triangle.fill",
@@ -41,7 +31,7 @@ struct PriorityFilterView: View {
                     }
                     
                     FilterPill(
-                        title: "high",
+                        title: "important",
                         icon: "circle.fill",
                         color: .yellow,
                         isSelected: selectedPriority == .high,
@@ -49,9 +39,13 @@ struct PriorityFilterView: View {
                     ) {
                         selectedPriority = .high
                     }
+                    
+                    Spacer()
                 }
-                .padding()
+                .padding(.horizontal)
+                .padding(.vertical, 12)
                 .background(Color(.systemBackground))
+                .frame(maxWidth: .infinity, alignment: .leading)
                 
                 Divider()
                 
@@ -120,26 +114,23 @@ struct PriorityFilterView: View {
     // MARK: - Helpers
     
     private var priorityLabel: String {
-        guard let priority = selectedPriority else {
-            return "priority"
-        }
+        // Default to urgent if nothing selected
+        let priority = selectedPriority ?? .urgent
         
         switch priority {
         case .urgent:
             return "urgent"
         case .high:
-            return "high priority"
+            return "important"
         case .normal:
             return "normal"
         }
     }
     
     private var filteredMessages: [PriorityMessage] {
-        guard let selectedPriority = selectedPriority else {
-            return viewModel.allPriorityMessages
-        }
-        
-        return viewModel.allPriorityMessages.filter { $0.message.priority == selectedPriority }
+        // Default to urgent if nothing selected
+        let priority = selectedPriority ?? .urgent
+        return viewModel.allPriorityMessages.filter { $0.message.priority == priority }
     }
     
     private func groupedByConversation() -> [(key: String, value: [PriorityMessage])] {

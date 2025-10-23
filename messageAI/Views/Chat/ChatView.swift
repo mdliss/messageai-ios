@@ -297,14 +297,6 @@ struct ChatView: View {
                             Label("summarize", systemImage: "doc.text")
                         }
                         
-                        Button {
-                            Task {
-                                try? await aiViewModel.extractActionItems(conversationId: conversation.id)
-                            }
-                        } label: {
-                            Label("action items", systemImage: "checklist")
-                        }
-                        
                         Divider()
                         
                         Button {

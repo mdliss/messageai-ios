@@ -1,379 +1,428 @@
 {
-  "metadata": {
-    "version": "1.0.0",
-    "projectName": "MessageAI Critical Implementation",
-    "createdAt": "2025-10-23T00:00:00Z",
-    "lastUpdated": "2025-10-23T00:00:00Z"
-  },
-  "tags": {
-    "master": {
-      "name": "master",
-      "description": "Main implementation tasks for MessageAI critical fixes and features",
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Fix Polls Disappearing Bug",
+        "description": "Investigate and fix bug where polls disappear after voting. Ensure polls persist properly in Firestore.",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "Add logging to poll lifecycle. Check Firestore triggers for race conditions. Verify poll document persistence. Test with manual poll creation and voting flow.",
+        "testStrategy": "Create poll with 3 users, all vote for same option, verify poll persists and doesn't disappear.",
+        "complexity": 4,
+        "estimatedHours": 2
+      },
+      {
+        "id": 2,
+        "title": "Implement Poll Consensus Detection",
+        "description": "Create Cloud Function trigger to detect when all participants vote for same option in poll",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "details": "onPollComplete trigger on conversations/{id}/polls/{pollId}. Check if all participants voted. Check if all votes are for same option. Return consensus data.",
+        "testStrategy": "Create poll, have 3 users all vote option 2, verify trigger detects consensus.",
+        "complexity": 5,
+        "estimatedHours": 2
+      },
+      {
+        "id": 3,
+        "title": "Auto-Create Decision from Poll Consensus",
+        "description": "When poll reaches consensus, automatically create decision entry in Decisions collection",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          2
+        ],
+        "details": "In onPollComplete trigger, create decision document with: decision text, poll reference, timestamp, participants. Store in conversations/{id}/decisions/{decisionId}.",
+        "testStrategy": "Poll with consensus should create decision in Decisions tab within 2 seconds.",
+        "complexity": 4,
+        "estimatedHours": 2
+      },
+      {
+        "id": 4,
+        "title": "Update Decisions UI to Show Poll-Based Decisions",
+        "description": "Modify DecisionsView to display decisions created from polls with proper formatting",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          3
+        ],
+        "details": "Add decision type indicator. Show poll question and winning option. Display voter names. Link back to original poll context.",
+        "testStrategy": "Decisions tab shows poll-based decisions with all metadata visible.",
+        "complexity": 3,
+        "estimatedHours": 1
+      },
+      {
+        "id": 5,
+        "title": "Implement Message Embedding Generation",
+        "description": "Create Cloud Function trigger to generate OpenAI embeddings for new messages",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "onMessageCreated trigger. Call OpenAI text-embedding-3-small API. Generate 1536-float vector. Store in message document embedding field. Timeout 10 seconds. Error handling: log but don't block delivery.",
+        "testStrategy": "Send message, verify embedding array stored in Firestore message document.",
+        "complexity": 6,
+        "estimatedHours": 3
+      },
+      {
+        "id": 6,
+        "title": "Update Message Schema with Embedding Field",
+        "description": "Add embedding array field to Message model and Firestore schema",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "Update Message.swift to include optional embedding: [Float]? field. Update toDictionary() and init. Update MessageEntity Core Data model. Handle backward compatibility.",
+        "testStrategy": "Message can be created with and without embeddings. Saves/loads correctly.",
+        "complexity": 3,
+        "estimatedHours": 1
+      },
+      {
+        "id": 7,
+        "title": "Implement Cosine Similarity Utility",
+        "description": "Create utility function to calculate cosine similarity between two embedding vectors",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "Create cosineSimilarity(vec1: [Float], vec2: [Float]) -> Float function. Formula: dot(vec1, vec2) / (norm(vec1) * norm(vec2)). Optimize for 1536-dimension vectors. Target < 1ms per calculation.",
+        "testStrategy": "Unit test with known vectors. Verify returns 1.0 for identical, 0.0 for orthogonal, -1.0 for opposite.",
+        "complexity": 4,
+        "estimatedHours": 2
+      },
+      {
+        "id": 8,
+        "title": "Create RAG Search Cloud Function",
+        "description": "Implement semantic search function using embeddings and vector similarity",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          5,
+          7
+        ],
+        "details": "aiSearch HTTPS callable function. Input: conversationId, query. Generate query embedding. Fetch last 500 messages with embeddings. Calculate cosine similarity for each. Sort by score, take top 10. Call GPT-4 with context. Return: {answer: string, sources: [{messageId, text, score}]}. Timeout 30 seconds.",
+        "testStrategy": "Search 'when are we meeting?' in conversation with 'let's sync tomorrow 3pm', verify finds semantically.",
+        "complexity": 6,
+        "estimatedHours": 4
+      },
+      {
+        "id": 9,
+        "title": "Build RAG Search UI",
+        "description": "Create client UI to display LLM-generated answers with expandable sources",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          8
+        ],
+        "details": "Add search button to chat toolbar. Search view with query input. Display LLM answer prominently. Expandable 'View sources' section. Show message text, sender, timestamp, similarity score. Loading state. Error handling.",
+        "testStrategy": "Enter query, verify answer displays with sources. Tap sources, verify expands correctly.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 10,
+        "title": "Implement Offline Fallback for Search",
+        "description": "Add fallback to keyword search when offline or embeddings unavailable",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          9
+        ],
+        "details": "Detect network status. If offline, use Core Data keyword search. Display notice: 'Offline - showing keyword results'. Limit to 50 results.",
+        "testStrategy": "Toggle airplane mode, search, verify falls back to keyword search with notice.",
+        "complexity": 3,
+        "estimatedHours": 1
+      },
+      {
+        "id": 11,
+        "title": "Create Priority Detection Cloud Function",
+        "description": "Implement Cloud Function to analyze messages and assign priority levels",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "aiDetectPriority callable function. Input: messageId. Pattern match urgent keywords: 'ASAP', 'urgent', 'emergency', 'critical', 'blocker'. If match, set priority='urgent'. Check high priority: 'important', '@mentions', '?'. If ambiguous, call GPT-4 to rate 1-5. Update message with priority field. Return: {priority, reason}. Timeout 10 seconds.",
+        "testStrategy": "Send 'URGENT: Production down!', verify priority='urgent' set.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 12,
+        "title": "Add Priority Field to Message Schema",
+        "description": "Update Message model to include priority field",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "Add priority: String? field to Message.swift (values: 'urgent', 'high', 'normal'). Update toDictionary() and init. Update MessageEntity Core Data model.",
+        "testStrategy": "Message can be created with priority. Saves/loads correctly to Firestore and Core Data.",
+        "complexity": 2,
+        "estimatedHours": 1
+      },
+      {
+        "id": 13,
+        "title": "Implement Priority UI Indicators",
+        "description": "Add visual indicators for urgent (red hazard) and high priority (yellow circle) messages",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          11,
+          12
+        ],
+        "details": "Update MessageBubbleView. For priority='urgent', add red hazard emoji or icon on left. For priority='high', add yellow circle border around message. Ensure indicators visible but not intrusive.",
+        "testStrategy": "Urgent message shows red hazard. High priority shows yellow circle. Normal has no indicator.",
+        "complexity": 4,
+        "estimatedHours": 2
+      },
+      {
+        "id": 14,
+        "title": "Create Priority Filter View",
+        "description": "Build UI to filter and show only priority messages across all conversations",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          13
+        ],
+        "details": "Add priority filter button to conversations list toolbar. Filter view shows all messages with priority='urgent' or 'high'. Group by conversation. Sort by timestamp descending. Tap to jump to message in conversation.",
+        "testStrategy": "Send urgent and high priority messages across conversations. Filter shows all priority messages.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 15,
+        "title": "Create Decision Tracking Cloud Function",
+        "description": "Implement Cloud Function to detect and track team decisions",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "aiDetectDecisions callable function. Input: conversationId, messageRange (default 50). Pattern match: 'decided', 'let's go with', 'agreed to', 'approved', 'moving forward'. If match, call GPT-4: 'Extract decision and context'. Create decision document. Return: {decisions: [{text, sourceMsgIds, timestamp, participants}]}. Timeout 30 seconds.",
+        "testStrategy": "Conversation ending with 'let's go with PostgreSQL' creates decision.",
+        "complexity": 6,
+        "estimatedHours": 3
+      },
+      {
+        "id": 16,
+        "title": "Create Decisions Collection Schema",
+        "description": "Define and implement Firestore schema for decisions collection",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "Schema: conversations/{id}/decisions/{decisionId} with fields: id, conversationId, text, sourceMsgIds[], pollId (optional), participants[], createdAt, dismissed. Create Decision model in Swift with Codable.",
+        "testStrategy": "Can create, read, update decision documents in Firestore.",
+        "complexity": 3,
+        "estimatedHours": 1
+      },
+      {
+        "id": 17,
+        "title": "Update Decisions Tab to Show All Decisions",
+        "description": "Enhance DecisionsView to display both poll-based and AI-detected decisions",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          15,
+          16
+        ],
+        "details": "Query conversations/{id}/decisions collection. Show chronological timeline grouped by date. Display decision text, timestamp, participants. Distinguish between poll-based and AI-detected. Tap to jump to source messages. Search functionality.",
+        "testStrategy": "Decisions tab shows all decisions from all conversations with proper formatting.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 18,
+        "title": "Implement Action Items Extraction Cloud Function",
+        "description": "Create Cloud Function to extract actionable items from conversations",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "aiExtractActions callable function. Input: conversationId, messageRange (default 100). Call GPT-4: 'Extract actionable items with owners and deadlines'. Parse into structured array: [{title, assignee, dueDate, sourceMsgIds, confidence}]. Store in conversations/{id}/ai/actionItems. Return: {items: array}. Timeout 30 seconds.",
+        "testStrategy": "'Bob, can you review PR by Friday?' extracts item with assignee=Bob, dueDate=Friday.",
+        "complexity": 6,
+        "estimatedHours": 4
+      },
+      {
+        "id": 19,
+        "title": "Create Action Items Collection Schema",
+        "description": "Define Firestore schema for action items",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [],
+        "details": "Schema: conversations/{id}/ai/actionItems/{itemId} with: id, conversationId, title, assignee, dueDate, sourceMsgIds[], confidence, completed, createdAt, createdBy, updatedAt. Create ActionItem model in Swift.",
+        "testStrategy": "Can create, read, update, delete action items in Firestore.",
+        "complexity": 3,
+        "estimatedHours": 1
+      },
+      {
+        "id": 20,
+        "title": "Build Action Items Panel UI",
+        "description": "Create UI panel to view and manage action items in chat",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          18,
+          19
+        ],
+        "details": "Add 'Action Items' button to chat toolbar. Panel shows all items for conversation. Display: title, assignee, due date, completion status. Tap to expand and see source messages. Mark complete checkbox. Edit and delete buttons.",
+        "testStrategy": "Action Items panel shows extracted items. Can mark complete, edit, delete.",
+        "complexity": 6,
+        "estimatedHours": 4
+      },
+      {
+        "id": 21,
+        "title": "Implement Action Items CRUD Operations",
+        "description": "Add create, update, delete functionality for action items",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          20
+        ],
+        "details": "Manual add button opens form: title (required), assignee (optional), due date (optional). Update: tap item to edit any field. Delete: swipe to delete with confirmation. All operations persist to Firestore immediately.",
+        "testStrategy": "Can manually add item, edit title/assignee/date, delete item. All persist correctly.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 22,
+        "title": "Add Offline Queue Support for Action Items",
+        "description": "Implement offline queue for action item operations",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          21
+        ],
+        "details": "Queue operations in Core Data when offline: create, update, delete, complete. On reconnect, sync queue to Firestore. Show pending sync indicator. Retry logic with exponential backoff.",
+        "testStrategy": "Add/edit/delete items offline. Reconnect. Verify sync within 1 second.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 23,
+        "title": "Create User Settings Screen",
+        "description": "Build settings screen for time zone and work hours preferences",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [],
+        "details": "New SettingsView accessible from profile. Time zone picker (dropdown of common zones). Work hours: start time picker, end time picker (defaults 9am-5pm). Preferences toggle: Enable proactive assistant, Notify on urgent. Save to users/{uid}/settings in Firestore.",
+        "testStrategy": "Can select time zone, set work hours, toggle preferences. All save correctly.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 24,
+        "title": "Implement Scheduling Detection Cloud Function",
+        "description": "Create Cloud Function to detect scheduling needs in conversations",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          23
+        ],
+        "details": "aiDetectScheduling callable function. Input: conversationId, messageRange (default 20). Pattern match: 'let's meet', 'schedule', 'when can'. If match, call GPT-4: 'Does this indicate scheduling need? Confidence?'. If confidence > 70%, return suggestions. Timeout 30 seconds.",
+        "testStrategy": "'When can we all sync?' triggers detection with high confidence.",
+        "complexity": 6,
+        "estimatedHours": 3
+      },
+      {
+        "id": 25,
+        "title": "Implement Time Suggestion Logic",
+        "description": "Generate timezone-aware meeting time suggestions",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          24
+        ],
+        "details": "Fetch participant time zones from settings. Calculate overlapping work hours. Generate 3-5 optimal time slots. Format: 'Thursday 2pm EST / 11am PST / 7pm GMT / 12:30am IST'. Avoid before 9am or after 6pm in any zone. Prefer Tuesday-Thursday.",
+        "testStrategy": "3 users (PST, EST, GMT) get suggestions respecting all time zones.",
+        "complexity": 6,
+        "estimatedHours": 4
+      },
+      {
+        "id": 26,
+        "title": "Build Proactive Suggestion UI",
+        "description": "Create UI card to display scheduling suggestions and create polls",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          25
+        ],
+        "details": "Suggestion card appears in chat when scheduling detected. Message: 'I noticed you're trying to schedule a meeting. Would you like help?' Shows 3-5 time options. 'Yes, help me' button creates poll pre-filled with options. 'Dismiss' button hides permanently.",
+        "testStrategy": "Scheduling conversation triggers card. 'Yes' creates poll with suggested times.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 27,
+        "title": "Implement Poll Pre-fill from Suggestions",
+        "description": "Auto-populate poll with AI-suggested time slots",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          26
+        ],
+        "details": "When user taps 'Yes, help me', create poll document with: question='When should we meet?', options=suggested times array. Conversation participants auto-added as voters. Poll appears in Decisions tab immediately.",
+        "testStrategy": "Tapping 'Yes' creates poll with 3-5 time options pre-filled correctly.",
+        "complexity": 4,
+        "estimatedHours": 2
+      },
+      {
+        "id": 28,
+        "title": "Comprehensive Testing with iOS Simulator MCP",
+        "description": "Test all features autonomously using iOS Simulator MCP",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4,
+          9,
+          10,
+          13,
+          14,
+          17,
+          20,
+          21,
+          22,
+          26,
+          27
+        ],
+        "details": "Launch 3 simulators (PST, EST, GMT users). Test: Create group chat. Send action items, verify extraction. Create poll, all vote same, verify decision. Send urgent message, verify red hazard. Search semantically, verify RAG. Toggle airplane mode, test offline sync. App lifecycle testing. Take screenshots of all features.",
+        "testStrategy": "All test scenarios pass. Screenshots captured. Performance measured.",
+        "complexity": 6,
+        "estimatedHours": 4
+      },
+      {
+        "id": 29,
+        "title": "Performance Testing and Optimization",
+        "description": "Measure and optimize performance to meet targets",
+        "status": "pending",
+        "priority": "high",
+        "dependencies": [
+          28
+        ],
+        "details": "Measure: Message delivery (<200ms), offline sync (<1s), AI features (<3-5s), scroll (60 FPS). Optimize: Cache embeddings, batch Firestore operations, reduce UI redraws. Profile with Instruments.",
+        "testStrategy": "All performance targets met or exceeded.",
+        "complexity": 5,
+        "estimatedHours": 3
+      },
+      {
+        "id": 30,
+        "title": "Generate Documentation",
+        "description": "Create comprehensive documentation for the project",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          28,
+          29
+        ],
+        "details": "Generate ARCHITECTURE.md (system overview, RAG pipeline, data flow). Update README.md with setup instructions. Create TESTPLAN.md with test scenarios. Create CHANGELOG.md tracking all changes. Include diagrams where helpful.",
+        "testStrategy": "All documentation files created and comprehensive.",
+        "complexity": 4,
+        "estimatedHours": 3
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "projectName": "MessageAI Critical Implementation",
       "createdAt": "2025-10-23T00:00:00Z",
-      "tasks": []
+      "lastUpdated": "2025-10-23T00:00:00Z"
     }
-  },
-  "currentTag": "master",
-  "tasks": [
-    {
-      "id": 1,
-      "title": "Fix Polls Disappearing Bug",
-      "description": "Investigate and fix bug where polls disappear after voting. Ensure polls persist properly in Firestore.",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "Add logging to poll lifecycle. Check Firestore triggers for race conditions. Verify poll document persistence. Test with manual poll creation and voting flow.",
-      "testStrategy": "Create poll with 3 users, all vote for same option, verify poll persists and doesn't disappear.",
-      "complexity": 4,
-      "estimatedHours": 2
-    },
-    {
-      "id": 2,
-      "title": "Implement Poll Consensus Detection",
-      "description": "Create Cloud Function trigger to detect when all participants vote for same option in poll",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [1],
-      "details": "onPollComplete trigger on conversations/{id}/polls/{pollId}. Check if all participants voted. Check if all votes are for same option. Return consensus data.",
-      "testStrategy": "Create poll, have 3 users all vote option 2, verify trigger detects consensus.",
-      "complexity": 5,
-      "estimatedHours": 2
-    },
-    {
-      "id": 3,
-      "title": "Auto-Create Decision from Poll Consensus",
-      "description": "When poll reaches consensus, automatically create decision entry in Decisions collection",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [2],
-      "details": "In onPollComplete trigger, create decision document with: decision text, poll reference, timestamp, participants. Store in conversations/{id}/decisions/{decisionId}.",
-      "testStrategy": "Poll with consensus should create decision in Decisions tab within 2 seconds.",
-      "complexity": 4,
-      "estimatedHours": 2
-    },
-    {
-      "id": 4,
-      "title": "Update Decisions UI to Show Poll-Based Decisions",
-      "description": "Modify DecisionsView to display decisions created from polls with proper formatting",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [3],
-      "details": "Add decision type indicator. Show poll question and winning option. Display voter names. Link back to original poll context.",
-      "testStrategy": "Decisions tab shows poll-based decisions with all metadata visible.",
-      "complexity": 3,
-      "estimatedHours": 1
-    },
-    {
-      "id": 5,
-      "title": "Implement Message Embedding Generation",
-      "description": "Create Cloud Function trigger to generate OpenAI embeddings for new messages",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "onMessageCreated trigger. Call OpenAI text-embedding-3-small API. Generate 1536-float vector. Store in message document embedding field. Timeout 10 seconds. Error handling: log but don't block delivery.",
-      "testStrategy": "Send message, verify embedding array stored in Firestore message document.",
-      "complexity": 6,
-      "estimatedHours": 3
-    },
-    {
-      "id": 6,
-      "title": "Update Message Schema with Embedding Field",
-      "description": "Add embedding array field to Message model and Firestore schema",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "Update Message.swift to include optional embedding: [Float]? field. Update toDictionary() and init. Update MessageEntity Core Data model. Handle backward compatibility.",
-      "testStrategy": "Message can be created with and without embeddings. Saves/loads correctly.",
-      "complexity": 3,
-      "estimatedHours": 1
-    },
-    {
-      "id": 7,
-      "title": "Implement Cosine Similarity Utility",
-      "description": "Create utility function to calculate cosine similarity between two embedding vectors",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "Create cosineSimilarity(vec1: [Float], vec2: [Float]) -> Float function. Formula: dot(vec1, vec2) / (norm(vec1) * norm(vec2)). Optimize for 1536-dimension vectors. Target < 1ms per calculation.",
-      "testStrategy": "Unit test with known vectors. Verify returns 1.0 for identical, 0.0 for orthogonal, -1.0 for opposite.",
-      "complexity": 4,
-      "estimatedHours": 2
-    },
-    {
-      "id": 8,
-      "title": "Create RAG Search Cloud Function",
-      "description": "Implement semantic search function using embeddings and vector similarity",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [5, 7],
-      "details": "aiSearch HTTPS callable function. Input: conversationId, query. Generate query embedding. Fetch last 500 messages with embeddings. Calculate cosine similarity for each. Sort by score, take top 10. Call GPT-4 with context. Return: {answer: string, sources: [{messageId, text, score}]}. Timeout 30 seconds.",
-      "testStrategy": "Search 'when are we meeting?' in conversation with 'let's sync tomorrow 3pm', verify finds semantically.",
-      "complexity": 6,
-      "estimatedHours": 4
-    },
-    {
-      "id": 9,
-      "title": "Build RAG Search UI",
-      "description": "Create client UI to display LLM-generated answers with expandable sources",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [8],
-      "details": "Add search button to chat toolbar. Search view with query input. Display LLM answer prominently. Expandable 'View sources' section. Show message text, sender, timestamp, similarity score. Loading state. Error handling.",
-      "testStrategy": "Enter query, verify answer displays with sources. Tap sources, verify expands correctly.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 10,
-      "title": "Implement Offline Fallback for Search",
-      "description": "Add fallback to keyword search when offline or embeddings unavailable",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [9],
-      "details": "Detect network status. If offline, use Core Data keyword search. Display notice: 'Offline - showing keyword results'. Limit to 50 results.",
-      "testStrategy": "Toggle airplane mode, search, verify falls back to keyword search with notice.",
-      "complexity": 3,
-      "estimatedHours": 1
-    },
-    {
-      "id": 11,
-      "title": "Create Priority Detection Cloud Function",
-      "description": "Implement Cloud Function to analyze messages and assign priority levels",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "aiDetectPriority callable function. Input: messageId. Pattern match urgent keywords: 'ASAP', 'urgent', 'emergency', 'critical', 'blocker'. If match, set priority='urgent'. Check high priority: 'important', '@mentions', '?'. If ambiguous, call GPT-4 to rate 1-5. Update message with priority field. Return: {priority, reason}. Timeout 10 seconds.",
-      "testStrategy": "Send 'URGENT: Production down!', verify priority='urgent' set.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 12,
-      "title": "Add Priority Field to Message Schema",
-      "description": "Update Message model to include priority field",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "Add priority: String? field to Message.swift (values: 'urgent', 'high', 'normal'). Update toDictionary() and init. Update MessageEntity Core Data model.",
-      "testStrategy": "Message can be created with priority. Saves/loads correctly to Firestore and Core Data.",
-      "complexity": 2,
-      "estimatedHours": 1
-    },
-    {
-      "id": 13,
-      "title": "Implement Priority UI Indicators",
-      "description": "Add visual indicators for urgent (red hazard) and high priority (yellow circle) messages",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [11, 12],
-      "details": "Update MessageBubbleView. For priority='urgent', add red hazard emoji or icon on left. For priority='high', add yellow circle border around message. Ensure indicators visible but not intrusive.",
-      "testStrategy": "Urgent message shows red hazard. High priority shows yellow circle. Normal has no indicator.",
-      "complexity": 4,
-      "estimatedHours": 2
-    },
-    {
-      "id": 14,
-      "title": "Create Priority Filter View",
-      "description": "Build UI to filter and show only priority messages across all conversations",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [13],
-      "details": "Add priority filter button to conversations list toolbar. Filter view shows all messages with priority='urgent' or 'high'. Group by conversation. Sort by timestamp descending. Tap to jump to message in conversation.",
-      "testStrategy": "Send urgent and high priority messages across conversations. Filter shows all priority messages.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 15,
-      "title": "Create Decision Tracking Cloud Function",
-      "description": "Implement Cloud Function to detect and track team decisions",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "aiDetectDecisions callable function. Input: conversationId, messageRange (default 50). Pattern match: 'decided', 'let's go with', 'agreed to', 'approved', 'moving forward'. If match, call GPT-4: 'Extract decision and context'. Create decision document. Return: {decisions: [{text, sourceMsgIds, timestamp, participants}]}. Timeout 30 seconds.",
-      "testStrategy": "Conversation ending with 'let's go with PostgreSQL' creates decision.",
-      "complexity": 6,
-      "estimatedHours": 3
-    },
-    {
-      "id": 16,
-      "title": "Create Decisions Collection Schema",
-      "description": "Define and implement Firestore schema for decisions collection",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "Schema: conversations/{id}/decisions/{decisionId} with fields: id, conversationId, text, sourceMsgIds[], pollId (optional), participants[], createdAt, dismissed. Create Decision model in Swift with Codable.",
-      "testStrategy": "Can create, read, update decision documents in Firestore.",
-      "complexity": 3,
-      "estimatedHours": 1
-    },
-    {
-      "id": 17,
-      "title": "Update Decisions Tab to Show All Decisions",
-      "description": "Enhance DecisionsView to display both poll-based and AI-detected decisions",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [15, 16],
-      "details": "Query conversations/{id}/decisions collection. Show chronological timeline grouped by date. Display decision text, timestamp, participants. Distinguish between poll-based and AI-detected. Tap to jump to source messages. Search functionality.",
-      "testStrategy": "Decisions tab shows all decisions from all conversations with proper formatting.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 18,
-      "title": "Implement Action Items Extraction Cloud Function",
-      "description": "Create Cloud Function to extract actionable items from conversations",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "aiExtractActions callable function. Input: conversationId, messageRange (default 100). Call GPT-4: 'Extract actionable items with owners and deadlines'. Parse into structured array: [{title, assignee, dueDate, sourceMsgIds, confidence}]. Store in conversations/{id}/ai/actionItems. Return: {items: array}. Timeout 30 seconds.",
-      "testStrategy": "'Bob, can you review PR by Friday?' extracts item with assignee=Bob, dueDate=Friday.",
-      "complexity": 6,
-      "estimatedHours": 4
-    },
-    {
-      "id": 19,
-      "title": "Create Action Items Collection Schema",
-      "description": "Define Firestore schema for action items",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [],
-      "details": "Schema: conversations/{id}/ai/actionItems/{itemId} with: id, conversationId, title, assignee, dueDate, sourceMsgIds[], confidence, completed, createdAt, createdBy, updatedAt. Create ActionItem model in Swift.",
-      "testStrategy": "Can create, read, update, delete action items in Firestore.",
-      "complexity": 3,
-      "estimatedHours": 1
-    },
-    {
-      "id": 20,
-      "title": "Build Action Items Panel UI",
-      "description": "Create UI panel to view and manage action items in chat",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [18, 19],
-      "details": "Add 'Action Items' button to chat toolbar. Panel shows all items for conversation. Display: title, assignee, due date, completion status. Tap to expand and see source messages. Mark complete checkbox. Edit and delete buttons.",
-      "testStrategy": "Action Items panel shows extracted items. Can mark complete, edit, delete.",
-      "complexity": 6,
-      "estimatedHours": 4
-    },
-    {
-      "id": 21,
-      "title": "Implement Action Items CRUD Operations",
-      "description": "Add create, update, delete functionality for action items",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [20],
-      "details": "Manual add button opens form: title (required), assignee (optional), due date (optional). Update: tap item to edit any field. Delete: swipe to delete with confirmation. All operations persist to Firestore immediately.",
-      "testStrategy": "Can manually add item, edit title/assignee/date, delete item. All persist correctly.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 22,
-      "title": "Add Offline Queue Support for Action Items",
-      "description": "Implement offline queue for action item operations",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [21],
-      "details": "Queue operations in Core Data when offline: create, update, delete, complete. On reconnect, sync queue to Firestore. Show pending sync indicator. Retry logic with exponential backoff.",
-      "testStrategy": "Add/edit/delete items offline. Reconnect. Verify sync within 1 second.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 23,
-      "title": "Create User Settings Screen",
-      "description": "Build settings screen for time zone and work hours preferences",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [],
-      "details": "New SettingsView accessible from profile. Time zone picker (dropdown of common zones). Work hours: start time picker, end time picker (defaults 9am-5pm). Preferences toggle: Enable proactive assistant, Notify on urgent. Save to users/{uid}/settings in Firestore.",
-      "testStrategy": "Can select time zone, set work hours, toggle preferences. All save correctly.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 24,
-      "title": "Implement Scheduling Detection Cloud Function",
-      "description": "Create Cloud Function to detect scheduling needs in conversations",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [23],
-      "details": "aiDetectScheduling callable function. Input: conversationId, messageRange (default 20). Pattern match: 'let's meet', 'schedule', 'when can'. If match, call GPT-4: 'Does this indicate scheduling need? Confidence?'. If confidence > 70%, return suggestions. Timeout 30 seconds.",
-      "testStrategy": "'When can we all sync?' triggers detection with high confidence.",
-      "complexity": 6,
-      "estimatedHours": 3
-    },
-    {
-      "id": 25,
-      "title": "Implement Time Suggestion Logic",
-      "description": "Generate timezone-aware meeting time suggestions",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [24],
-      "details": "Fetch participant time zones from settings. Calculate overlapping work hours. Generate 3-5 optimal time slots. Format: 'Thursday 2pm EST / 11am PST / 7pm GMT / 12:30am IST'. Avoid before 9am or after 6pm in any zone. Prefer Tuesday-Thursday.",
-      "testStrategy": "3 users (PST, EST, GMT) get suggestions respecting all time zones.",
-      "complexity": 6,
-      "estimatedHours": 4
-    },
-    {
-      "id": 26,
-      "title": "Build Proactive Suggestion UI",
-      "description": "Create UI card to display scheduling suggestions and create polls",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [25],
-      "details": "Suggestion card appears in chat when scheduling detected. Message: 'I noticed you're trying to schedule a meeting. Would you like help?' Shows 3-5 time options. 'Yes, help me' button creates poll pre-filled with options. 'Dismiss' button hides permanently.",
-      "testStrategy": "Scheduling conversation triggers card. 'Yes' creates poll with suggested times.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 27,
-      "title": "Implement Poll Pre-fill from Suggestions",
-      "description": "Auto-populate poll with AI-suggested time slots",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [26],
-      "details": "When user taps 'Yes, help me', create poll document with: question='When should we meet?', options=suggested times array. Conversation participants auto-added as voters. Poll appears in Decisions tab immediately.",
-      "testStrategy": "Tapping 'Yes' creates poll with 3-5 time options pre-filled correctly.",
-      "complexity": 4,
-      "estimatedHours": 2
-    },
-    {
-      "id": 28,
-      "title": "Comprehensive Testing with iOS Simulator MCP",
-      "description": "Test all features autonomously using iOS Simulator MCP",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [1, 2, 3, 4, 9, 10, 13, 14, 17, 20, 21, 22, 26, 27],
-      "details": "Launch 3 simulators (PST, EST, GMT users). Test: Create group chat. Send action items, verify extraction. Create poll, all vote same, verify decision. Send urgent message, verify red hazard. Search semantically, verify RAG. Toggle airplane mode, test offline sync. App lifecycle testing. Take screenshots of all features.",
-      "testStrategy": "All test scenarios pass. Screenshots captured. Performance measured.",
-      "complexity": 6,
-      "estimatedHours": 4
-    },
-    {
-      "id": 29,
-      "title": "Performance Testing and Optimization",
-      "description": "Measure and optimize performance to meet targets",
-      "status": "pending",
-      "priority": "high",
-      "dependencies": [28],
-      "details": "Measure: Message delivery (<200ms), offline sync (<1s), AI features (<3-5s), scroll (60 FPS). Optimize: Cache embeddings, batch Firestore operations, reduce UI redraws. Profile with Instruments.",
-      "testStrategy": "All performance targets met or exceeded.",
-      "complexity": 5,
-      "estimatedHours": 3
-    },
-    {
-      "id": 30,
-      "title": "Generate Documentation",
-      "description": "Create comprehensive documentation for the project",
-      "status": "pending",
-      "priority": "medium",
-      "dependencies": [28, 29],
-      "details": "Generate ARCHITECTURE.md (system overview, RAG pipeline, data flow). Update README.md with setup instructions. Create TESTPLAN.md with test scenarios. Create CHANGELOG.md tracking all changes. Include diagrams where helpful.",
-      "testStrategy": "All documentation files created and comprehensive.",
-      "complexity": 4,
-      "estimatedHours": 3
-    }
-  ]
+  }
 }

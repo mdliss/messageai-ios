@@ -90,32 +90,48 @@ export const extractActionItems = functions
       
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
-        max_tokens: 800,
+        max_tokens: 1000,
         temperature: 0.7,
         messages: [{
           role: 'system',
-          content: 'You are an intelligent assistant helping remote teams track tasks mentioned in conversations. Extract clear, actionable items with owners and deadlines. Return as JSON array. Never use hyphens. Be specific.',
+          content: 'You are an intelligent assistant extracting SPECIFIC TASKS from team conversations. An action item is a concrete task requiring someone to DO something. Extract tasks with owners and deadlines. Return as JSON array. Never use hyphens.',
         }, {
           role: 'user',
-          content: `Extract action items from this remote team conversation. For each clear, actionable item, return JSON format:
+          content: `Extract action items from this conversation. An ACTION ITEM is a SPECIFIC TASK requiring someone to DO something concrete.
 
-[
-  {
-    "title": "Task description",
-    "assignee": "Person name or null if not mentioned",
-    "dueDate": "Natural language date like 'friday', 'tomorrow', 'next week', or null",
-    "confidence": 0.8,
-    "sourceMsgIds": ["array of relevant message indices"]
-  }
-]
+✅ EXTRACT these as action items:
+- Direct assignments: "Bob, review PR #234 by Friday"
+- Personal commitments: "I'll send the report tomorrow"
+- Commands: "You must finish the assignment"
+- Requirements: "Make sure to attend the standup"
+- Imperatives: "Submit the proposal by EOD"
+- Collective tasks: "We need to schedule the meeting"
+- Urgent actions: "ASAP: Review the PR"
 
-Focus on:
-- Commitments people made ("I'll do X")
-- Tasks explicitly assigned ("Bob, can you...")
-- Deadlines mentioned ("by Friday", "EOD")
-- Follow ups needed
+❌ DO NOT extract these:
+- Questions without commitment: "Should we meet tomorrow?"
+- Informational statements: "The meeting is tomorrow"
+- Casual suggestions: "Maybe we could grab coffee"
+- Reactions: "That sounds good"
+- Just urgency flags: "Important" or "Urgent" alone without a task
+- Observations: "The deadline is Friday" (just stating fact)
+- Vague possibilities: "We might need to..."
 
-Return only the JSON array. If no action items exist, return empty array []. Never use hyphens.
+For EACH action item found, return JSON:
+{
+  "title": "Specific task description (what needs to be done)",
+  "assignee": "Person name if mentioned, or null",
+  "dueDate": "Natural language like 'friday', 'tomorrow', 'next week', or null",
+  "confidence": 0.8,
+  "sourceMsgIds": []
+}
+
+Rules:
+- Extract ONLY specific tasks requiring action
+- Include assignee if mentioned in message
+- Include deadline if mentioned
+- If unsure, lean toward INCLUDING (better to extract than miss)
+- Return empty array [] if no valid action items
 
 Conversation:
 ${transcript}`,
@@ -136,35 +152,10 @@ ${transcript}`,
         parsedItems = [];
       }
       
-      const actionItemsText = parsedItems.length > 0
-        ? parsedItems.map((item: any, idx: number) => 
-            `• ${item.assignee || 'Someone'}: ${item.title}${item.dueDate ? ` (${item.dueDate})` : ''}`
-          ).join('\n')
-        : 'No clear action items found in this conversation.';
-      
-      // Store insight for display in popup
-      const insightRef = admin.firestore()
-        .collection('conversations')
-        .doc(conversationId)
-        .collection('insights')
-        .doc();
-      
-      const insight = {
-        id: insightRef.id,
-        conversationId: conversationId,
-        type: 'action_items',
-        content: actionItemsText,
-        metadata: {
-          messageCount: messages.length,
-          itemCount: parsedItems.length,
-        },
-        messageIds: messages.map(m => m.id),
-        triggeredBy: context.auth.uid,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        dismissed: false,
-      };
-      
-      await insightRef.set(insight);
+      // CRITICAL FIX: Do NOT create insight popup (would show to all participants)
+      // Action items are now managed in dedicated ActionItemsView panel
+      // Only the requesting device should see results, not via broadcast popup
+      console.log(`ℹ️ Skipping insight creation - using ActionItemsView panel instead`);
       
       // CRITICAL FIX: Create individual ActionItem documents for CRUD operations
       const actionItemsCollection = admin.firestore()
@@ -219,10 +210,10 @@ ${transcript}`,
       }
       
       console.log(`✅ Action items extracted: ${createdItems.length} items created`);
+      console.log(`   Items will appear in ActionItemsView panel on requesting device only`);
       
       return {
         success: true,
-        insight: insight,
         items: createdItems,
         itemCount: createdItems.length
       };

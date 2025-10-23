@@ -15,6 +15,8 @@ struct ActionItemsView: View {
     @StateObject private var viewModel = ActionItemsViewModel()
     @State private var showAddItem = false
     @State private var editingItem: ActionItem?
+    @State private var showExtractionComplete = false
+    @State private var extractionMessage = ""
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -118,10 +120,23 @@ struct ActionItemsView: View {
                         // AI extraction button
                         Button {
                             Task {
+                                print("🔘 EXTRACTION BUTTON CLICKED")
+                                print("   Conversation: \(conversationId)")
+                                print("   User: \(currentUserId)")
+                                
                                 await viewModel.extractActionItems(
                                     conversationId: conversationId,
                                     currentUserId: currentUserId
                                 )
+                                
+                                // Show completion feedback
+                                let itemCount = viewModel.actionItems.count
+                                extractionMessage = itemCount > 0 
+                                    ? "✅ Extracted \(itemCount) action \(itemCount == 1 ? "item" : "items")"
+                                    : "No action items found in this conversation"
+                                showExtractionComplete = true
+                                
+                                print("✅ EXTRACTION COMPLETE: \(itemCount) items")
                             }
                         } label: {
                             if viewModel.isExtracting {
@@ -178,6 +193,13 @@ struct ActionItemsView: View {
                 }
             } message: {
                 Text(viewModel.errorMessage ?? "")
+            }
+            .alert("extraction complete", isPresented: $showExtractionComplete) {
+                Button("ok") {
+                    showExtractionComplete = false
+                }
+            } message: {
+                Text(extractionMessage)
             }
             .onAppear {
                 viewModel.subscribeToActionItems(conversationId: conversationId)

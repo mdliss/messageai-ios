@@ -62,13 +62,17 @@ class DecisionsViewModel: ObservableObject {
                         let insights = documents.compactMap { doc -> AIInsight? in
                             try? doc.data(as: AIInsight.self)
                         }.filter { insight in
-                            // Show polls for all conversations with 2+ people
-                            // Show regular decisions only for group chats (3+ people)
+                            // Show different decision types based on context
                             let isPoll = insight.metadata?.isPoll == true
+                            let isConsenusDecision = insight.metadata?.pollId != nil
                             
                             if isPoll {
                                 // Polls visible for any conversation with 2+ participants
                                 return participantCount >= 2
+                            } else if isConsenusDecision {
+                                // CRITICAL FIX: Always show consensus decisions regardless of participant count
+                                // These are important final decisions that reached agreement
+                                return true
                             } else {
                                 // Regular decisions only for group chats (3+ participants)
                                 return conversationType == "group" || participantCount >= 3

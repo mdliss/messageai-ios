@@ -122,7 +122,7 @@ struct SearchView: View {
                         }
                         
                         if !viewModel.aiSearchResults.isEmpty {
-                            // Source Messages
+                            // Referenced Messages (sources AI used to generate answer)
                             Section {
                                 ForEach(viewModel.aiSearchResults) { result in
                                     Button {
@@ -136,9 +136,14 @@ struct SearchView: View {
                                 HStack {
                                     Image(systemName: "doc.text.magnifyingglass")
                                         .foregroundStyle(.blue)
-                                    Text("source messages (\(viewModel.aiSearchResults.count))")
+                                    Text("referenced messages (\(viewModel.aiSearchResults.count))")
                                         .textCase(.none)
                                 }
+                                .font(.subheadline)
+                            } footer: {
+                                Text("these messages were used by AI to generate the answer above. percentages show similarity to your search.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
                             }
                         } else {
                             // Keyword Search Results (fallback)

@@ -134,11 +134,22 @@ class SearchViewModel: ObservableObject {
                     }
                     
                     // Extract RAG answer for this conversation
+                    // CRITICAL FIX: Only store answer if it's not a "couldn't find" response
                     if let answer = data["answer"] as? String {
-                        await MainActor.run {
-                            ragAnswers[conversationId] = answer
+                        // Skip storing if it's a generic "no results" message
+                        let isNoResultsMessage = answer.lowercased().contains("couldn't find") ||
+                                                 answer.lowercased().contains("no relevant") ||
+                                                 answer.lowercased().contains("don't contain") ||
+                                                 answer.lowercased().contains("no messages found")
+                        
+                        if !isNoResultsMessage {
+                            await MainActor.run {
+                                ragAnswers[conversationId] = answer
+                            }
+                            print("   💡 RAG Answer stored: \(answer)")
+                        } else {
+                            print("   ℹ️ Skipping no-results answer to avoid duplicates")
                         }
-                        print("   💡 RAG Answer: \(answer)")
                     }
                     
                     // Extract sources
