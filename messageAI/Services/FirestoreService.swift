@@ -152,7 +152,9 @@ class FirestoreService {
         for user in users {
             participantDetails[user.id] = ParticipantDetail(
                 displayName: user.displayName,
-                photoURL: user.photoURL
+                photoURL: user.photoURL,
+                avatarType: user.avatarType,
+                avatarId: user.avatarId
             )
         }
         
@@ -187,7 +189,9 @@ class FirestoreService {
         for user in users {
             participantDetails[user.id] = ParticipantDetail(
                 displayName: user.displayName,
-                photoURL: user.photoURL
+                photoURL: user.photoURL,
+                avatarType: user.avatarType,
+                avatarId: user.avatarId
             )
         }
         

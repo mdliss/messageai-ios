@@ -226,34 +226,8 @@ struct MessageBubbleView: View {
     // MARK: - Avatar
     
     private var avatarView: some View {
-        Group {
-            if let photoURL = message.senderPhotoURL, let url = URL(string: photoURL) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .overlay {
-                            Text(message.senderName.prefix(1).uppercased())
-                                .font(.caption)
-                                .foregroundStyle(.white)
-                        }
-                }
-                .frame(width: 32, height: 32)
-                .clipShape(Circle())
-            } else {
-                Circle()
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 32, height: 32)
-                    .overlay {
-                        Text(message.senderName.prefix(1).uppercased())
-                            .font(.caption)
-                            .foregroundStyle(.white)
-                    }
-            }
-        }
+        UserAvatarView(message: message, size: 32)
+            .padding(.bottom, 2)
     }
     
     // MARK: - Status Indicator

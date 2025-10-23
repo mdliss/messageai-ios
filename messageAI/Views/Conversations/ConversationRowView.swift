@@ -66,63 +66,39 @@ struct ConversationRowView: View {
     
     @ViewBuilder
     private var avatarView: some View {
-        ZStack(alignment: .bottomTrailing) {
-            if conversation.type == .group {
-                // Group avatar
+        if conversation.type == .group {
+            // Group avatar
+            Circle()
+                .fill(Color.purple.opacity(0.3))
+                .frame(width: 50, height: 50)
+                .overlay {
+                    Image(systemName: "person.3.fill")
+                        .foregroundStyle(.purple)
+                }
+        } else {
+            // Direct chat avatar using UserAvatarView
+            let otherUserId = conversation.participantIds.first { $0 != currentUserId }
+            if let participant = conversation.participantDetails[otherUserId ?? ""] {
+                UserAvatarView(
+                    participant: participant,
+                    size: 50,
+                    showOnlineIndicator: true,
+                    isOnline: isOnline
+                )
+                .onAppear {
+                    subscribeToPresence()
+                }
+            } else {
+                // Fallback if no participant found
                 Circle()
-                    .fill(Color.purple.opacity(0.3))
+                    .fill(Color.blue.opacity(0.3))
                     .frame(width: 50, height: 50)
                     .overlay {
-                        Image(systemName: "person.3.fill")
-                            .foregroundStyle(.purple)
+                        Text("?")
+                            .foregroundStyle(.white)
+                            .fontWeight(.semibold)
                     }
-            } else {
-                // Direct chat avatar
-                let otherUserId = conversation.participantIds.first { $0 != currentUserId }
-                let participant = conversation.participantDetails[otherUserId ?? ""]
-                
-                if let photoURL = participant?.photoURL, let url = URL(string: photoURL) {
-                    AsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Circle()
-                            .fill(Color.blue.opacity(0.3))
-                            .overlay {
-                                Text(participant?.displayName.prefix(1).uppercased() ?? "?")
-                                    .foregroundStyle(.white)
-                                    .fontWeight(.semibold)
-                            }
-                    }
-                    .frame(width: 50, height: 50)
-                    .clipShape(Circle())
-                } else {
-                    Circle()
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                        .overlay {
-                            Text(participant?.displayName.prefix(1).uppercased() ?? "?")
-                                .foregroundStyle(.white)
-                                .fontWeight(.semibold)
-                        }
-                }
-                
-                // Online indicator for direct chats
-                if conversation.type == .direct {
-                    Circle()
-                        .fill(isOnline ? Color.green : Color.gray)
-                        .frame(width: 14, height: 14)
-                        .overlay {
-                            Circle()
-                                .stroke(Color(.systemBackground), lineWidth: 2)
-                        }
-                        .offset(x: 2, y: 2)
-                }
             }
-        }
-        .onAppear {
-            subscribeToPresence()
         }
     }
     

@@ -120,16 +120,26 @@ enum ConversationType: String, Codable {
 struct ParticipantDetail: Codable, Equatable, Hashable {
     let displayName: String
     let photoURL: String?
+    let avatarType: AvatarType?
+    let avatarId: String?
     
-    init(displayName: String, photoURL: String? = nil) {
+    init(displayName: String, photoURL: String? = nil, avatarType: AvatarType? = nil, avatarId: String? = nil) {
         self.displayName = displayName
         self.photoURL = photoURL
+        self.avatarType = avatarType
+        self.avatarId = avatarId
     }
     
     func toDictionary() -> [String: Any] {
         var dict: [String: Any] = ["displayName": displayName]
         if let photoURL = photoURL {
             dict["photoURL"] = photoURL
+        }
+        if let avatarType = avatarType {
+            dict["avatarType"] = avatarType.rawValue
+        }
+        if let avatarId = avatarId {
+            dict["avatarId"] = avatarId
         }
         return dict
     }

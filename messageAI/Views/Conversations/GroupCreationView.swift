@@ -83,30 +83,7 @@ struct GroupCreationView: View {
                                         .font(.title3)
                                     
                                     // Avatar
-                                    if let photoURL = user.photoURL, let url = URL(string: photoURL) {
-                                        AsyncImage(url: url) { image in
-                                            image
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                        } placeholder: {
-                                            Circle()
-                                                .fill(Color.blue.opacity(0.3))
-                                                .overlay {
-                                                    Text(user.displayName.prefix(1).uppercased())
-                                                        .foregroundStyle(.white)
-                                                }
-                                        }
-                                        .frame(width: 44, height: 44)
-                                        .clipShape(Circle())
-                                    } else {
-                                        Circle()
-                                            .fill(Color.blue.opacity(0.3))
-                                            .frame(width: 44, height: 44)
-                                            .overlay {
-                                                Text(user.displayName.prefix(1).uppercased())
-                                                    .foregroundStyle(.white)
-                                            }
-                                    }
+                                    UserAvatarView(user: user, size: 44)
                                     
                                     // User info
                                     VStack(alignment: .leading, spacing: 4) {

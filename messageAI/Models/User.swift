@@ -90,6 +90,12 @@ struct User: Codable, Identifiable, Equatable {
         if let fcmToken = fcmToken {
             dict["fcmToken"] = fcmToken
         }
+        if let avatarType = avatarType {
+            dict["avatarType"] = avatarType.rawValue
+        }
+        if let avatarId = avatarId {
+            dict["avatarId"] = avatarId
+        }
         
         return dict
     }
@@ -121,6 +127,8 @@ extension User {
         case email
         case displayName
         case photoURL
+        case avatarType
+        case avatarId
         case isOnline
         case lastSeen
         case fcmToken

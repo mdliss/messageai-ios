@@ -268,7 +268,9 @@ class ChatViewModel: ObservableObject {
     ///   - senderId: Sender ID
     ///   - senderName: Sender name
     ///   - senderPhotoURL: Sender photo URL
-    func sendMessage(text: String, senderId: String, senderName: String, senderPhotoURL: String? = nil) async {
+    ///   - senderAvatarType: Sender avatar type
+    ///   - senderAvatarId: Sender avatar ID
+    func sendMessage(text: String, senderId: String, senderName: String, senderPhotoURL: String? = nil, senderAvatarType: AvatarType? = nil, senderAvatarId: String? = nil) async {
         guard let conversationId = conversationId else {
             errorMessage = "No conversation selected"
             return
@@ -290,6 +292,8 @@ class ChatViewModel: ObservableObject {
             senderId: senderId,
             senderName: senderName,
             senderPhotoURL: senderPhotoURL,
+            senderAvatarType: senderAvatarType,
+            senderAvatarId: senderAvatarId,
             type: .text,
             text: text,
             createdAt: Date(),
@@ -349,7 +353,9 @@ class ChatViewModel: ObservableObject {
     ///   - senderId: Sender ID
     ///   - senderName: Sender name
     ///   - senderPhotoURL: Sender photo URL
-    func sendImageMessage(image: UIImage, caption: String = "", senderId: String, senderName: String, senderPhotoURL: String? = nil) async {
+    ///   - senderAvatarType: Sender avatar type
+    ///   - senderAvatarId: Sender avatar ID
+    func sendImageMessage(image: UIImage, caption: String = "", senderId: String, senderName: String, senderPhotoURL: String? = nil, senderAvatarType: AvatarType? = nil, senderAvatarId: String? = nil) async {
         guard let conversationId = conversationId else {
             errorMessage = "No conversation selected"
             return
@@ -386,6 +392,8 @@ class ChatViewModel: ObservableObject {
                 senderId: senderId,
                 senderName: senderName,
                 senderPhotoURL: senderPhotoURL,
+                senderAvatarType: senderAvatarType,
+                senderAvatarId: senderAvatarId,
                 type: .image,
                 text: caption,
                 imageURL: imageURL,

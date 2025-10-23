@@ -15,6 +15,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
     let senderId: String
     let senderName: String
     let senderPhotoURL: String?
+    let senderAvatarType: AvatarType?
+    let senderAvatarId: String?
     
     let type: MessageType
     let text: String
@@ -37,6 +39,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
          senderId: String,
          senderName: String,
          senderPhotoURL: String? = nil,
+         senderAvatarType: AvatarType? = nil,
+         senderAvatarId: String? = nil,
          type: MessageType = .text,
          text: String,
          imageURL: String? = nil,
@@ -53,6 +57,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         self.senderId = senderId
         self.senderName = senderName
         self.senderPhotoURL = senderPhotoURL
+        self.senderAvatarType = senderAvatarType
+        self.senderAvatarId = senderAvatarId
         self.type = type
         self.text = text
         self.imageURL = imageURL
@@ -84,6 +90,12 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         
         if let senderPhotoURL = senderPhotoURL {
             dict["senderPhotoURL"] = senderPhotoURL
+        }
+        if let senderAvatarType = senderAvatarType {
+            dict["senderAvatarType"] = senderAvatarType.rawValue
+        }
+        if let senderAvatarId = senderAvatarId {
+            dict["senderAvatarId"] = senderAvatarId
         }
         if let imageURL = imageURL {
             dict["imageURL"] = imageURL

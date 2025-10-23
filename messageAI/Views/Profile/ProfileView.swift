@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import FirebaseFirestore
 
 struct ProfileView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
@@ -15,6 +16,9 @@ struct ProfileView: View {
     @State private var showNameEditor = false
     @State private var editedName = ""
     @StateObject private var editViewModel = ProfileEditingViewModel()
+    @State private var userListener: ListenerRegistration?
+    
+    private let db = FirebaseConfig.shared.db
     
     var body: some View {
         NavigationStack {
@@ -251,6 +255,54 @@ struct ProfileView: View {
                 }
             }
         }
+        .onAppear {
+            setupUserListener()
+        }
+        .onDisappear {
+            userListener?.remove()
+            userListener = nil
+        }
+    }
+    
+    // MARK: - Firestore Listener
+    
+    /// Set up real-time listener for user document changes
+    private func setupUserListener() {
+        guard let userId = authViewModel.currentUser?.id else { return }
+        
+        print("👂 Setting up user document listener for: \(userId)")
+        
+        // Remove existing listener if any
+        userListener?.remove()
+        
+        // Set up new listener
+        userListener = db.collection("users").document(userId)
+            .addSnapshotListener { documentSnapshot, error in
+                if let error = error {
+                    print("❌ Error listening to user document: \(error.localizedDescription)")
+                    return
+                }
+                
+                guard let document = documentSnapshot, document.exists else {
+                    print("⚠️ User document does not exist")
+                    return
+                }
+                
+                do {
+                    let updatedUser = try document.data(as: User.self)
+                    print("🔄 User document updated - refreshing profile view")
+                    print("   Avatar Type: \(updatedUser.avatarType?.rawValue ?? "nil")")
+                    print("   Avatar ID: \(updatedUser.avatarId ?? "nil")")
+                    print("   Display Name: \(updatedUser.displayName)")
+                    
+                    // Update AuthViewModel's current user
+                    Task { @MainActor in
+                        authViewModel.currentUser = updatedUser
+                    }
+                } catch {
+                    print("❌ Error decoding user document: \(error.localizedDescription)")
+                }
+            }
     }
     
     // MARK: - Helper Views

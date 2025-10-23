@@ -422,7 +422,9 @@ struct ChatView: View {
                 text: text,
                 senderId: currentUserId,
                 senderName: participant?.displayName ?? "You",
-                senderPhotoURL: participant?.photoURL
+                senderPhotoURL: participant?.photoURL,
+                senderAvatarType: participant?.avatarType,
+                senderAvatarId: participant?.avatarId
             )
         }
         
@@ -441,7 +443,9 @@ struct ChatView: View {
                 caption: "",
                 senderId: currentUserId,
                 senderName: participant?.displayName ?? "You",
-                senderPhotoURL: participant?.photoURL
+                senderPhotoURL: participant?.photoURL,
+                senderAvatarType: participant?.avatarType,
+                senderAvatarId: participant?.avatarId
             )
         }
     }
