@@ -341,19 +341,32 @@ class AIInsightsViewModel: ObservableObject {
     ///   - currentUserId: Current user ID
     func dismissInsight(insightId: String, conversationId: String, currentUserId: String) async {
         do {
+            print("🚫 dismissInsight called")
+            print("   Insight ID: \(insightId)")
+            print("   Conversation ID: \(conversationId)")
+            print("   User dismissing: \(currentUserId)")
+            
             let insightRef = db.collection("conversations")
                 .document(conversationId)
                 .collection("insights")
                 .document(insightId)
             
+            print("   Firestore path: conversations/\(conversationId)/insights/\(insightId)")
+            print("   Action: Setting dismissed=true")
+            print("   ⚠️  NOTE: This ONLY hides notification from chat")
+            print("   ⚠️  Decision will PERSIST in Decisions tab (not filtered by dismissed status)")
+            
             try await insightRef.updateData([
                 "dismissed": true
             ])
             
-            // Remove from local array
+            // Remove from local array (chat notifications only)
             insights.removeAll { $0.id == insightId }
             
             print("✅ Insight dismissed: \(insightId)")
+            print("   Notification removed from chat view")
+            print("   Decision still exists in Firestore")
+            print("   Decisions tab will continue showing this decision (permanent record)")
         } catch {
             errorMessage = "Failed to dismiss insight: \(error.localizedDescription)"
             print("❌ Failed to dismiss insight: \(error.localizedDescription)")

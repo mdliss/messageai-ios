@@ -56,12 +56,15 @@ class DecisionsViewModel: ObservableObject {
                     print("📝 Setting up listener for conversation: \(conversationDoc.documentID)")
                     print("   Conversation type: \(conversationType), participants: \(participantCount)")
                     
+                    // CRITICAL FIX: Do NOT filter by dismissed status in Decisions tab
+                    // Decisions tab is a permanent historical record - should show all confirmed decisions
+                    // regardless of whether notification was dismissed in chat
+                    // Only filter by type="decision" to get all decision-related insights
                     let insightsRef = conversationDoc.reference
                         .collection("insights")
                         .whereField("type", isEqualTo: "decision")
-                        .whereField("dismissed", isEqualTo: false)
                     
-                    print("   Query: conversations/\(conversationDoc.documentID)/insights where type='decision' and dismissed=false")
+                    print("   Query: conversations/\(conversationDoc.documentID)/insights where type='decision' (NO dismissed filter)")
                     
                     // Use real-time listener for live vote updates
                     let listener = insightsRef.addSnapshotListener { [weak self] snapshot, error in
