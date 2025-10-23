@@ -33,9 +33,18 @@ export const detectDecision = functions
       return;
     }
     
+    // CRITICAL FIX: Skip AI assistant messages to prevent auto-decisions from polls
+    // AI assistant posts messages with "option 1, option 2, option 3" which would trigger decision detection
+    if (message.senderId === 'ai_assistant') {
+      console.log(`ℹ️ Skipping decision detection for AI assistant message`);
+      return;
+    }
+    
     const text = message.text.toLowerCase();
     
     // Pattern matching for decision keywords
+    // CRITICAL: These should be FINAL DECISION phrases only, not voting phrases
+    // Removed: "option 1/2/3", "works for me", "that works", "sounds good" (those are votes, not decisions)
     const decisionKeywords = [
       "let's go with",
       "let's use",
@@ -46,12 +55,8 @@ export const detectDecision = functions
       "final decision",
       "confirmed",
       "settling on",
-      "option 1",
-      "option 2",
-      "option 3",
-      "works for me",
-      "that works",
-      "sounds good",
+      "greenlit",
+      "moving forward with",
     ];
     
     const hasDecisionKeyword = decisionKeywords.some(keyword => 
