@@ -196,8 +196,38 @@ export const confirmSchedulingSelection = functions
             'metadata.totalVotes': participantIds.length
           });
           
+          // CRITICAL FIX: Create separate consensus decision entry
+          // This ensures the decision is logged even if poll gets dismissed
+          const consensusDecisionRef = admin.firestore()
+            .collection('conversations')
+            .doc(conversationId)
+            .collection('insights')
+            .doc();
+          
+          const consensusDecision = {
+            id: consensusDecisionRef.id,
+            conversationId: conversationId,
+            type: 'decision',
+            content: `Meeting scheduled: ${winningTime}`,
+            metadata: {
+              pollId: activePoll.id,
+              winningOption: winningOption,
+              winningTime: winningTime,
+              totalVotes: participantIds.length,
+              voteCount: maxVotes,
+              consensusReached: maxVotes === participantIds.length
+            },
+            messageIds: [finalMessageRef.id],
+            triggeredBy: 'system',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            dismissed: false
+          };
+          
+          await consensusDecisionRef.set(consensusDecision);
+          
           console.log(`✅ Poll completed and saved to decisions! Winning option: ${winningOption} with ${maxVotes} votes`);
           console.log(`   Decision will remain visible in decisions tab with results`);
+          console.log(`   Created separate consensus decision entry: ${consensusDecisionRef.id}`);
         } else {
           // Acknowledge vote but don't finalize yet
           const confirmationRef = admin.firestore()

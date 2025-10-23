@@ -28,7 +28,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
     
     var localId: String?
     var isSynced: Bool
-    var priority: Bool?
+    var priority: MessagePriority?  // NEW: Priority level (urgent, high, normal)
+    var embedding: [Float]?  // NEW: OpenAI text-embedding-3-small (1536 floats)
     
     /// Initialize message
     init(id: String = UUID().uuidString,
@@ -45,7 +46,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
          readBy: [String] = [],
          localId: String? = nil,
          isSynced: Bool = false,
-         priority: Bool? = nil) {
+         priority: MessagePriority? = nil,
+         embedding: [Float]? = nil) {
         self.id = id
         self.conversationId = conversationId
         self.senderId = senderId
@@ -61,6 +63,7 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         self.localId = localId
         self.isSynced = isSynced
         self.priority = priority
+        self.embedding = embedding
     }
     
     /// Convert to Firestore dictionary
@@ -89,7 +92,10 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
             dict["localId"] = localId
         }
         if let priority = priority {
-            dict["priority"] = priority
+            dict["priority"] = priority.rawValue
+        }
+        if let embedding = embedding {
+            dict["embedding"] = embedding
         }
         
         return dict
@@ -132,5 +138,12 @@ enum MessageStatus: String, Codable, CaseIterable {
     case delivered
     case read
     case failed
+}
+
+/// Message priority enum
+enum MessagePriority: String, Codable, CaseIterable {
+    case urgent   // Red hazard symbol - critical/emergency
+    case high     // Yellow circle - important/needs attention
+    case normal   // No indicator - regular message
 }
 

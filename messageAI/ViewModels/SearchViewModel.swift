@@ -33,6 +33,7 @@ class SearchViewModel: ObservableObject {
     @Published var searchQuery = ""
     @Published var useAISearch = true  // Toggle between AI and keyword search
     @Published var currentUserId: String?  // Track current user for conversation filtering
+    @Published var ragAnswers: [String: String] = [:]  // NEW: Conversation ID -> RAG answer
     
     private let coreDataService = CoreDataService.shared
     private let functions = Functions.functions()
@@ -117,9 +118,9 @@ class SearchViewModel: ObservableObject {
                 print("🔍 [AI Search] Conversation \(index + 1)/\(snapshot.documents.count): \(conversationId)")
                 
                 do {
-                    print("   📡 Calling searchMessages Cloud Function...")
+                    print("   📡 Calling ragSearch Cloud Function...")
                     
-                    let result = try await functions.httpsCallable("searchMessages").call([
+                    let result = try await functions.httpsCallable("ragSearch").call([
                         "conversationId": conversationId,
                         "query": query,
                         "limit": 5
@@ -127,22 +128,35 @@ class SearchViewModel: ObservableObject {
                     
                     print("   ✅ Cloud Function returned")
                     
-                    guard let data = result.data as? [String: Any],
-                          let resultsData = data["results"] as? [[String: Any]] else {
+                    guard let data = result.data as? [String: Any] else {
                         print("   ⚠️ Invalid response format from Cloud Function")
                         continue
                     }
                     
-                    print("   📊 Got \(resultsData.count) results from this conversation")
+                    // Extract RAG answer for this conversation
+                    if let answer = data["answer"] as? String {
+                        await MainActor.run {
+                            ragAnswers[conversationId] = answer
+                        }
+                        print("   💡 RAG Answer: \(answer)")
+                    }
                     
-                    // Parse results
-                    let conversationResults = resultsData.compactMap { resultDict -> AISearchResult? in
-                        guard let messageId = resultDict["messageId"] as? String,
-                              let text = resultDict["text"] as? String,
-                              let senderName = resultDict["senderName"] as? String,
-                              let timestampStr = resultDict["timestamp"] as? String,
-                              let score = resultDict["score"] as? Double,
-                              let snippet = resultDict["snippet"] as? String else {
+                    // Extract sources
+                    guard let sourcesData = data["sources"] as? [[String: Any]] else {
+                        print("   ⚠️ No sources in response")
+                        continue
+                    }
+                    
+                    print("   📊 Got \(sourcesData.count) source messages from this conversation")
+                    
+                    // Parse source messages
+                    let conversationResults = sourcesData.compactMap { sourceDict -> AISearchResult? in
+                        guard let messageId = sourceDict["messageId"] as? String,
+                              let text = sourceDict["text"] as? String,
+                              let senderName = sourceDict["senderName"] as? String,
+                              let timestampStr = sourceDict["timestamp"] as? String,
+                              let score = sourceDict["score"] as? Double,
+                              let snippet = sourceDict["snippet"] as? String else {
                             return nil
                         }
                         
@@ -191,6 +205,7 @@ class SearchViewModel: ObservableObject {
         searchQuery = ""
         searchResults = []
         aiSearchResults = []
+        ragAnswers = [:]
     }
     
     /// Group results by conversation (for keyword search)

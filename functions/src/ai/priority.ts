@@ -49,28 +49,39 @@ export const detectPriority = functions
     );
     
     if (hasUrgentKeyword) {
-      // Mark as priority
+      // Mark as URGENT priority
       await snapshot.ref.update({
-        priority: true,
+        priority: 'urgent',
       });
       
-      console.log(`🚨 Message marked as priority: ${message.id}`);
+      console.log(`🚨 Message marked as URGENT: ${message.id}`);
       return;
     }
     
-    // For ambiguous cases, use AI (optional - can be skipped for MVP)
-    // This adds latency, so only use if needed
-    const ambiguousKeywords = ['important', 'need', 'must', 'should'];
-    const hasAmbiguousKeyword = ambiguousKeywords.some(keyword => 
+    // Check for HIGH priority keywords
+    const highPriorityKeywords = [
+      'important',
+      'need to',
+      'should',
+      'must',
+      '?',  // Questions often need responses
+      '@',  // Mentions
+    ];
+    
+    const hasHighPriorityKeyword = highPriorityKeywords.some(keyword => 
       text.includes(keyword)
     );
     
-    if (hasAmbiguousKeyword) {
+    // For ambiguous high-priority cases, use AI to confirm
+    if (hasHighPriorityKeyword) {
       try {
         const apiKey = functions.config().openai?.key;
         
         if (!apiKey) {
-          console.log('ℹ️ OpenAI API key not configured, skipping AI priority detection');
+          console.log('ℹ️ OpenAI API key not configured, marking as HIGH based on keywords');
+          await snapshot.ref.update({
+            priority: 'high',
+          });
           return;
         }
         
@@ -84,23 +95,33 @@ export const detectPriority = functions
           temperature: 0.3,
           messages: [{
             role: 'user',
-            content: `Rate the urgency of this message on a scale of 1-5, where 5 is extremely urgent and 1 is casual. Only respond with a number.\n\nMessage: "${message.text}"`,
+            content: `Rate the urgency of this message on a scale of 1-5, where 5 is extremely urgent, 4 is high priority, and 1-3 is normal. Only respond with a number.\n\nMessage: "${message.text}"`,
           }],
         });
         
         const ratingText = response.choices[0]?.message?.content || '0';
         const rating = parseInt(ratingText.trim());
         
-        if (rating >= 4) {
+        if (rating === 5) {
           await snapshot.ref.update({
-            priority: true,
+            priority: 'urgent',
           });
-          
-          console.log(`🚨 Message marked as priority (AI rating: ${rating}): ${message.id}`);
+          console.log(`🚨 Message marked as URGENT (AI rating: ${rating}): ${message.id}`);
+        } else if (rating === 4) {
+          await snapshot.ref.update({
+            priority: 'high',
+          });
+          console.log(`⚠️ Message marked as HIGH priority (AI rating: ${rating}): ${message.id}`);
+        } else {
+          console.log(`ℹ️ Message rated as normal (AI rating: ${rating}): ${message.id}`);
         }
         
       } catch (error) {
         console.error('❌ AI priority detection failed:', error);
+        // Fallback: mark as high if keywords detected
+        await snapshot.ref.update({
+          priority: 'high',
+        });
       }
     }
   });

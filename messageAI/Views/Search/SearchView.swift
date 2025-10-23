@@ -100,8 +100,29 @@ struct SearchView: View {
                 } else {
                     // Results list (AI or keyword)
                     List {
+                        // Show RAG answers first (grouped by conversation)
+                        if !viewModel.ragAnswers.isEmpty {
+                            Section {
+                                ForEach(Array(viewModel.ragAnswers.keys.sorted()), id: \.self) { conversationId in
+                                    if let answer = viewModel.ragAnswers[conversationId] {
+                                        RAGAnswerCard(
+                                            answer: answer,
+                                            conversationId: conversationId
+                                        )
+                                    }
+                                }
+                            } header: {
+                                HStack {
+                                    Image(systemName: "sparkles")
+                                        .foregroundStyle(.purple)
+                                    Text("ai answers")
+                                        .textCase(.none)
+                                }
+                            }
+                        }
+                        
                         if !viewModel.aiSearchResults.isEmpty {
-                            // AI Search Results
+                            // Source Messages
                             Section {
                                 ForEach(viewModel.aiSearchResults) { result in
                                     Button {
@@ -113,9 +134,9 @@ struct SearchView: View {
                                 }
                             } header: {
                                 HStack {
-                                    Image(systemName: "sparkles")
-                                        .foregroundStyle(.purple)
-                                    Text("ai search results (\(viewModel.aiSearchResults.count))")
+                                    Image(systemName: "doc.text.magnifyingglass")
+                                        .foregroundStyle(.blue)
+                                    Text("source messages (\(viewModel.aiSearchResults.count))")
                                         .textCase(.none)
                                 }
                             }
@@ -307,6 +328,64 @@ struct AISearchResultRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// RAG answer card view
+struct RAGAnswerCard: View {
+    let answer: String
+    let conversationId: String
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header with AI sparkles
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .foregroundStyle(.purple)
+                    .font(.title3)
+                
+                Text("AI Answer")
+                    .font(.headline)
+                    .foregroundStyle(.purple)
+                
+                Spacer()
+            }
+            
+            // Answer text
+            Text(answer)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .lineLimit(isExpanded ? nil : 5)
+            
+            // Expand/collapse button if text is long
+            if answer.count > 200 {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Text(isExpanded ? "show less" : "show more")
+                            .font(.caption)
+                            .foregroundStyle(.purple)
+                        
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(.purple)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.purple.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.purple.opacity(0.3), lineWidth: 1)
+        )
     }
 }
 

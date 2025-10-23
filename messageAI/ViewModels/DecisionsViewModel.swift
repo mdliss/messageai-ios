@@ -36,7 +36,6 @@ class DecisionsViewModel: ObservableObject {
             
             do {
                 let conversationsSnapshot = try await conversationsRef.getDocuments()
-                var allDecisions: [AIInsight] = []
                 
                 // Set up real-time listeners for each conversation's insights
                 for conversationDoc in conversationsSnapshot.documents {

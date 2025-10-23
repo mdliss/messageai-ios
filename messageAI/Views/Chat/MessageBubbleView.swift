@@ -68,19 +68,46 @@ struct MessageBubbleView: View {
                 }
                 
                 // Priority indicator badge
-                if message.priority == true {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
-                        Text("urgent")
-                            .font(.caption2.weight(.semibold))
+                if let priority = message.priority {
+                    switch priority {
+                    case .urgent:
+                        // Red hazard symbol for urgent messages
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption2)
+                            Text("urgent")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red)
+                        .cornerRadius(12)
+                        .padding(isFromCurrentUser ? .trailing : .leading, 4)
+                        
+                    case .high:
+                        // Yellow circle for high priority
+                        HStack(spacing: 4) {
+                            Image(systemName: "circle.fill")
+                                .font(.caption2)
+                            Text("important")
+                                .font(.caption2.weight(.semibold))
+                        }
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.yellow.opacity(0.3))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.yellow, lineWidth: 1.5)
+                        )
+                        .padding(isFromCurrentUser ? .trailing : .leading, 4)
+                        
+                    case .normal:
+                        // No indicator for normal priority
+                        EmptyView()
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.red)
-                    .cornerRadius(12)
-                    .padding(isFromCurrentUser ? .trailing : .leading, 4)
                 }
                 
                 // Message content
@@ -138,8 +165,24 @@ struct MessageBubbleView: View {
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(message.priority == true ? Color.red : Color.clear, lineWidth: 2)
+                    .stroke(priorityBorderColor, lineWidth: message.priority != nil ? 2 : 0)
             )
+    }
+    
+    /// Priority border color based on priority level
+    private var priorityBorderColor: Color {
+        guard let priority = message.priority else {
+            return Color.clear
+        }
+        
+        switch priority {
+        case .urgent:
+            return Color.red
+        case .high:
+            return Color.yellow
+        case .normal:
+            return Color.clear
+        }
     }
     
     // MARK: - Image Bubble
@@ -239,13 +282,6 @@ struct MessageBubbleView: View {
                 .font(.caption2)
                 .foregroundStyle(.red)
         }
-        
-        // Priority indicator
-        if message.priority == true {
-            Image(systemName: "flag.fill")
-                .font(.caption2)
-                .foregroundStyle(.red)
-        }
     }
     
     // MARK: - Computed Properties
@@ -292,7 +328,20 @@ struct MessageBubbleView: View {
                 senderName: "Alice",
                 text: "URGENT: we need to fix the bug ASAP!",
                 status: .read,
-                priority: true
+                priority: .urgent
+            ),
+            isFromCurrentUser: false,
+            showSenderName: true
+        )
+        
+        MessageBubbleView(
+            message: Message(
+                conversationId: "1",
+                senderId: "user2",
+                senderName: "Bob",
+                text: "Important: Can you review the PR when you get a chance?",
+                status: .read,
+                priority: .high
             ),
             isFromCurrentUser: false,
             showSenderName: true

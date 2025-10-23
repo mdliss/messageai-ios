@@ -115,8 +115,44 @@ struct DecisionRowView: View {
             } else {
                 // Regular decision UI
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(decision.content)
-                        .font(.body)
+                    // Check if this decision came from a poll consensus
+                    let isConsensusDecision = decision.metadata?.pollId != nil
+                    let consensusReached = decision.metadata?.consensusReached == true
+                    
+                    HStack(alignment: .top, spacing: 8) {
+                        if isConsensusDecision {
+                            Image(systemName: consensusReached ? "checkmark.seal.fill" : "chart.bar.fill")
+                                .foregroundStyle(consensusReached ? .green : .blue)
+                                .font(.title3)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            if isConsensusDecision && consensusReached {
+                                Text("Consensus Reached")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.green)
+                            }
+                            
+                            Text(decision.content)
+                                .font(.body)
+                        }
+                    }
+                    
+                    // Metadata row
+                    if let metadata = decision.metadata,
+                       isConsensusDecision,
+                       let voteCount = metadata.voteCount,
+                       let totalVotes = metadata.totalVotes {
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.3.fill")
+                                .font(.caption)
+                            Text("\(voteCount) of \(totalVotes) voted")
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                    }
                     
                     // Timestamp
                     HStack {

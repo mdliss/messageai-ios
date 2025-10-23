@@ -1,268 +1,635 @@
-# MessageAI - Product Requirements Document
-## Remote Team Professional Persona
+# MessageAI Critical Implementation Tasks - PRD
 
-### Executive Summary
-MessageAI is a production-ready iOS messaging app built for remote team professionals who need to cut through communication noise. The app uses AI to surface critical information (decisions, action items, priorities) while maintaining <200ms real-time messaging performance with full offline support.
+## Project Overview
+MessageAI is a production iOS messaging app for remote teams. This PRD covers critical defects to fix and missing AI features to implement to meet rubric requirements for 93-100 point "Excellent" tier.
 
-### Target: Rubric Score 90-100 points (Grade A)
+## Target: Remote Team Professional Persona
+- Works across 3-4 time zones with distributed team
+- Needs to catch up on 30+ overnight messages quickly
+- Makes decisions through async chat
+- Coordinates schedules across time zones
+- Cannot afford to miss urgent messages or action items
 
-## Critical Defects to Fix
+## Critical Defects
 
-### 1. Presence Sync Bug in New Chat Flow
-**Current Behavior**: When starting a new chat, all participants show as "online" regardless of actual status. In-chat view shows correct presence.
+### 1. Actionable Items Feature (Currently Broken)
+**Problem**: Feature exists in codebase but is non-functional. No UI for viewing, managing, or tracking action items.
 
-**Root Cause**: Presence listeners attach AFTER initial UI render, causing default "online" state flash.
+**Requirements**:
+- Cloud Function: Analyze message windows for task-related language ("I'll do X", "need to", "by Friday", "assigned to")
+- Return structured data: task title, optional assignee, optional due date, source message IDs, confidence score
+- Client UI: Action Items panel accessible from chat toolbar
+- Support: Add custom items, mark complete, reassign, offline queue
+- Each item links to source messages for context
+- Offline support: Queue operations locally, sync on reconnect
 
-**Fix Requirements**:
-- Initialize all presence states as "unknown" (never default to "online")
-- Attach RTDB `/status/{uid}` listeners BEFORE rendering participant list
-- Debounce rapid view switches to prevent listener thrashing
-- Proper cleanup on view dismissal
+**Acceptance Criteria**:
+- AI extracts 80%+ of actionable items from test conversations
+- UI allows full CRUD operations (create, read, update, delete)
+- Items persist across app restarts
+- Offline queue syncs within 1 second of reconnect
+- Can tap item to jump to source message in conversation
 
-**Acceptance**: New chat shows accurate presence within 1 second, no "everyone online" flash
+**Test Cases**:
+- Have 3-way conversation with clear action items ("Alice, can you review PR by Friday?")
+- Trigger extraction, verify items appear with correct owner and deadline
+- Mark item complete, verify persistence
+- Add custom item offline, reconnect, verify sync
+- Edit item assignee, verify update across all devices
 
-### 2. AI Summary Display Scoping
-**Current Broken Behavior**: 
-- Summary appears on ALL users' screens when one user requests it
-- Sometimes renders at top of message list causing scroll/layout bugs
+### 2. Polls Not Saving to Decisions Page
+**Problem**: When all participants vote on poll and choose same option, poll should auto-save to Decisions but doesn't. Sometimes polls disappear entirely.
 
-**Required Behavior**:
-- Display as bottom sheet/popup at screen bottom
-- Show ONLY on requesting user's device (local state, never broadcast)
-- Use ephemeral storage: `users/{uid}/ephemeral/summaries` or local state
-- Never persist to shared conversation data
+**Requirements**:
+- Implement consensus detection: when all voters choose same option
+- Automatically create decision entry in decisions collection
+- Include: decision text, poll reference, timestamp, participating users
+- Ensure poll data persists and never disappears unexpectedly
+- Link decision back to original poll for context
 
-**Acceptance**: User A requests → only A sees summary popup at bottom. User B never sees it.
+**Acceptance Criteria**:
+- When all participants vote for same option, decision appears in Decisions tab within 2 seconds
+- Polls never disappear after voting
+- Decision entry contains: poll question, winning option, voter names, timestamp
+- Can tap decision to view original poll context
+- Works correctly in group chats with 3+ participants
 
-### 3. Action Items Feature (currently broken)
-**Status**: Function exists but non-functional
+**Test Cases**:
+- Create group chat with 3 users
+- Create poll with 3 time options
+- Have all 3 users vote for option 2
+- Verify decision appears in Decisions tab on all devices within 2 seconds
+- Verify decision shows "All voted for: thursday 12pm EST..."
+- Verify poll persists and is not deleted
 
-**Implementation**:
-- Cloud Function: `aiExtractActions(conversationId, messageWindow)` 
-- Returns JSON with action items: {id, title, assignee, dueDate, sourceMsgIds, confidence}
-- Detection patterns: "I'll [action]", "need to [action]", "[person] should [action]", deadline phrases
-- Client UI: CRUD operations, offline queue, link to source messages
+### 3. Priority Message Detection (Not Implemented)
+**Problem**: Feature does not exist. No visual indicators for urgent or high-priority messages.
 
-**Acceptance**: 80%+ extraction accuracy, full CRUD offline/online, source message links
+**Requirements**:
+- Cloud Function: Analyze messages and assign priority levels (urgent or high)
+- Urgent signals: "ASAP", "urgent", "emergency", "critical", "blocker", "deadline"
+- High priority signals: "important", user mentions (@name), questions requiring response
+- UI urgent messages: Red hazard emoji symbol or badge
+- UI high priority messages: Yellow circle/highlight around message
+- Priority filter view: Show only flagged messages
+- Optional: Push notifications for urgent messages even if conversation muted
 
-### 4. Polls - AI-Triggered Inline Implementation
-**Current Flawed**: Polls in separate "Decisions" tab with popup
+**Acceptance Criteria**:
+- Correctly flags 85%+ of urgent messages (true positive rate)
+- False positive rate under 10%
+- UI clearly distinguishes urgent (red hazard) from high (yellow circle)
+- Priority filter view shows all flagged messages across conversations
+- Detection latency under 2 seconds (doesn't slow message delivery)
 
-**Required Behavior**:
-- AI detects poll-worthy content in group chats (≥3 participants): scheduling, decisions, planning questions
-- Inline suggestion: "📊 Create a poll for this question?"
-- User taps → compose poll (auto-filled from context) → sent as special message type
-- Live voting inline, results sync to Decisions tab
-- Data: `conversations/{id}/polls/{pollId}` with question, options, votes, timestamps
+**Test Cases**:
+- Send message: "URGENT: Production is down, need help immediately!"
+- Verify red hazard symbol appears
+- Send message: "Important question about tomorrow's meeting"
+- Verify yellow circle appears
+- Send casual message: "How's your weekend going?"
+- Verify no priority indicators
+- Use priority filter, verify only flagged messages shown
+- Measure detection latency, confirm under 2 seconds
 
-**Acceptance**: 80%+ detection rate, inline rendering, only in groups (3+ participants)
+### 4. Decision Tracking (Not Working)
+**Problem**: Feature does not detect or track decisions from conversations.
 
-### 5. Google Sign-In Crash
-**Triage**: Check GoogleService-Info.plist, URL schemes, test on physical device
+**Requirements**:
+- Cloud Function: Analyze message windows to detect decision-making language
+- Decision signals: "we decided", "let's go with", "agreed to", "final decision", "approved", "moving forward with"
+- Also detect poll results that reach consensus
+- Return: decision text, source message IDs, timestamp, participants
+- Store in Firestore: conversations/{id}/decisions/{decisionId}
+- Client UI: Decisions tab showing chronological timeline of all tracked decisions
+- Each decision links back to source messages
 
-**Action**: Fix within 30 min OR hide feature with "Coming soon" note. Not required by rubric.
+**Acceptance Criteria**:
+- Detects 75%+ of explicit decisions in test conversations
+- UI displays decision text, timestamp, and participants clearly
+- Decisions persist and sync across all participant devices
+- Can tap decision to jump to source message in conversation
+- Decisions tab shows chronological timeline grouped by date
 
-## Missing AI Features (Required by Rubric)
+**Test Cases**:
+- Have conversation ending with: "Agreed! Let's go with PostgreSQL for the database"
+- Verify decision appears in Decisions tab within 5 seconds
+- Decision text: "Use PostgreSQL for database"
+- Verify shows participants and timestamp
+- Tap decision, verify jumps to source message
+- Create poll, all vote same option, verify decision created
+- Check Decisions tab on different device, verify sync
 
-### Feature 1: Thread Summarization ✅
-**Status**: WORKING CORRECTLY
-**Keep as-is**, just fix display scoping per Defect #2
+## Missing AI Features
 
-### Feature 2: Action Item Extraction ❌
-**Status**: BROKEN - see Defect #3 for implementation
+### 5. Smart Search with RAG Pipeline (CRITICAL - Required by Rubric)
+**Current Problem**: Existing search uses keyword matching and returns raw messages. Rubric explicitly requires "RAG pipeline for conversation context."
 
-### Feature 3: Smart Search (AI-Powered Semantic Search) ❌
-**Implementation**:
-- Cloud Function: `aiSearch(conversationId, query, filters)`
-- Server-side: fetch candidates → generate embeddings → cosine similarity ranking → return top N with snippets
-- Client UI: search bar in chat, natural language queries, date/sender/type filters, "Jump to message" buttons
-- Performance: <3 seconds response time
+**Requirements**:
 
-**Acceptance**: Finds relevant messages without exact keyword matches, <3s response, clear empty states
+**Phase 1 - Store Embeddings**:
+- Cloud Function trigger on message creation
+- Call OpenAI embeddings API: text-embedding-3-small model
+- Generate 1536-float vector representing semantic meaning
+- Store embedding array directly in message document in Firestore
 
-### Feature 4: Priority Message Detection ❌
-**Implementation**:
-- Cloud Function: `aiDetectPriority(conversationId, newMessage)` 
-- Returns: {priority: "urgent"|"high"|"normal", reason: string}
-- Signals: "ASAP", "urgent", "emergency", @mentions, deadlines, questions
-- Run on message send or batch hourly
-- Client UI: badges (🔴 urgent, 🟡 high), priority filter view, optional urgent push notifications
+**Phase 2 - Semantic Search**:
+- Cloud Function for search (HTTPS callable)
+- Generate embedding for user query
+- Fetch last 500 messages with their embeddings
+- Calculate cosine similarity between query and each message embedding
+- Sort by similarity score (descending)
+- Retrieve top 10 most semantically similar messages
+- Feed those 10 messages as context to GPT-4
+- Return: LLM-generated answer + array of source messages with scores
 
-**Acceptance**: 85%+ accuracy, <10% false positives, clear UI distinction
+**Phase 3 - Client UI**:
+- Display LLM-generated answer prominently at top
+- Expandable "View sources" section showing retrieved messages
+- Each source shows: message text, sender, timestamp, similarity score
+- Loading state during search (spinner with "searching...")
+- Error handling for API failures
 
-### Feature 5: Decision Tracking ❌
-**Implementation**:
-- Cloud Function: `aiDetectDecisions(conversationId, messageWindow)`
-- Returns: {decisions: [{id, text, sourceMsgIds, timestamp}]}
-- Patterns: "we decided", "agreed to", "let's go with", poll results, "approved", "greenlit"
-- Store: `conversations/{id}/decisions/{decisionId}`
-- Client UI: Decisions tab timeline, link to source messages, filters
+**Why This Works**:
+- Semantic similarity means query "when are we meeting?" finds messages saying "let's sync tomorrow at 3pm" even with no shared keywords
+- Returns contextual answer instead of raw message dump
+- In-memory cosine similarity calculation takes 50-100ms for 500 messages
+- No need for external vector database (Pinecone) at this scale
 
-**Acceptance**: 75%+ detection rate, clear context display, persists and syncs
+**Acceptance Criteria**:
+- Finds semantically similar messages without exact keyword matches
+- Search completes in under 3 seconds (embedding generation + similarity + LLM)
+- Returns LLM-generated contextual answer with expandable sources
+- Sources sorted by relevance score (0.0 to 1.0)
+- Works offline: Falls back to keyword search with cached messages
+- Embedding generation adds under 500ms per message
 
-## Advanced AI Feature: Proactive Assistant
+**Test Cases**:
+- Search "basketball" in conversation about "NBA finals and LeBron's performance"
+- Verify finds messages without keyword "basketball" appearing
+- Search "when are we meeting?" in conversation with "let's sync tomorrow 3pm"
+- Verify returns answer: "The team is meeting tomorrow at 3pm" with source
+- Search with no matches, verify returns "No relevant messages found"
+- Measure latency: embedding (< 500ms) + search (< 2s) + LLM (< 1s) = < 3.5s total
+- Test offline: Verify falls back to keyword search
 
-### Time Zone Settings
-- User settings screen: `users/{uid}/settings`
-- Fields: timeZone, workHours {start, end}, preferredMeetingDurations, enableAIProposals
+### 6. Proactive Assistant (Advanced Feature)
+**Goal**: Auto-suggest meeting times and detect scheduling needs for remote teams working across time zones.
 
-### Scheduling Detection
-- Monitor group chats for: "let's schedule", "need to meet", "when can we sync"
-- Date/time references: "tomorrow", "next week", "Monday afternoon"
-- Explicit command: "AI, find meeting times"
+**Requirements**:
 
-### Meeting Time Suggestions
-Algorithm:
-1. Parse participant time zones from settings
-2. Find overlapping work hours across all participants
-3. Check conflicts (calendar integration optional for MVP)
-4. Propose 3-5 optimal slots with timezone-aware formatting
-5. Display inline or as dedicated card
+**Phase 1 - User Preferences**:
+- Settings screen for user time zone selection
+- Work hours preferences (default: 9am-5pm)
+- Store in Firestore: users/{uid}/settings
 
-Format: "Tuesday 2-3 PM ET (11 AM-12 PM PT)\nWednesday 10-11 AM ET (7-8 AM PT)"
+**Phase 2 - Scheduling Detection**:
+- Monitor group chat messages for scheduling intent
+- Trigger phrases: "let's meet", "when can we sync", "what time works", "schedule a meeting"
+- Cloud Function analyzes recent messages for scheduling request
+- Confidence threshold: 70%+ to trigger suggestions
 
-### One-Tap Poll Creation
-- "Tap to create poll with these times" button
-- Pre-populates poll with suggested slots
-- Sends to chat for group voting
+**Phase 3 - Time Suggestions**:
+- Parse participant time zones from user settings
+- Identify overlapping work hours across all participants
+- Propose 3-5 optimal time slots
+- Format with timezone-aware display: "Thursday 2pm EST / 11am PST / 7pm GMT / 12:30am IST (next day)"
+- Avoid early mornings (before 9am) and late evenings (after 6pm) in all zones
+- Prefer Tuesday-Thursday for better attendance
 
-**Acceptance**: 80%+ detection, respects time zones/work hours, <5s response, one-tap poll works
+**Phase 4 - Poll Creation**:
+- Display suggestion card in chat: "I noticed you're trying to schedule a meeting. Would you like help?"
+- "Yes, help me" button creates poll pre-filled with suggested times
+- Poll stored in conversations/{id}/polls/{pollId}
+- Participants vote via Decisions tab
+- When all vote, auto-creates decision entry
 
-## Cloud Functions Catalog
+**Acceptance Criteria**:
+- Detects 80%+ of scheduling requests (true positive rate)
+- Suggests times respecting all participant time zones and work hours
+- One-tap poll creation works smoothly
+- Suggestions appear within 5 seconds of detection
+- Pre-filled poll contains 3-5 time options with timezone formatting
+- False positive rate under 15% (doesn't trigger on non-scheduling conversations)
 
-### Core AI Functions
-1. `aiSummarize(conversationId, messageRange)` → {summary: markdown}
-2. `aiExtractActions(conversationId, messageRange)` → {items: [...]}
-3. `aiSearch(conversationId, query, filters)` → {results: [...]}
-4. `aiDetectPriority(conversationId, message)` → {priority: level, reason: string}
-5. `aiDetectDecisions(conversationId, messageRange)` → {decisions: [...]}
-6. `aiDetectScheduling(conversationId, messages)` → {suggestions: [...]}
+**Test Cases**:
+- Configure 3 users with different time zones: PST, EST, GMT
+- User 1: "When can we all sync up to discuss the roadmap?"
+- Verify suggestion appears within 5 seconds
+- Verify shows 3 time options respecting all time zones
+- Tap "Yes, help me", verify poll created with options pre-filled
+- All users vote, verify decision auto-created
+- Test false positive: "I like to sync my files daily"
+- Verify does NOT trigger scheduling suggestion
+
+## Cloud Functions Required
+
+### 1. onMessageCreated (Trigger)
+- Trigger: onCreate conversations/{id}/messages/{msgId}
+- Generate embedding using OpenAI text-embedding-3-small
+- Store embedding array (1536 floats) in message document
+- Timeout: 10 seconds
+- Error handling: Log failure but don't block message delivery
+
+### 2. aiExtractActions (HTTPS Callable)
+- Input: conversationId, messageRange (optional, default last 100)
+- Fetch messages from Firestore
+- Call GPT-4 with prompt: "Extract actionable items from this conversation"
+- Parse response into structured array: [{title, assignee, dueDate, sourceMsgIds, confidence}]
+- Store in conversations/{id}/ai/actionItems collection
+- Return: {success: boolean, items: array}
+- Timeout: 30 seconds
+
+### 3. aiSearch (HTTPS Callable) - RAG Pipeline
+- Input: conversationId, query, limit (default 10)
+- Generate query embedding using text-embedding-3-small
+- Fetch last 500 messages with embeddings from Firestore
+- Calculate cosine similarity for each message
+- Sort by similarity score, take top 10
+- Call GPT-4 with context: "Based on these messages, answer this query: {query}"
+- Return: {answer: string, sources: [{messageId, text, score, sender, timestamp}]}
+- Timeout: 30 seconds
+
+### 4. aiDetectPriority (HTTPS Callable)
+- Input: conversationId, messageId
+- Fetch message from Firestore
+- Pattern match for urgent keywords: "ASAP", "urgent", "emergency", "critical"
+- If no match, call GPT-4: "Rate urgency 1-5 scale"
+- If urgent (5) or high (4), update message document with priority field
+- Return: {priority: "urgent" | "high" | "normal", reason: string}
+- Timeout: 10 seconds
+
+### 5. aiDetectDecisions (HTTPS Callable)
+- Input: conversationId, messageRange (default last 50)
+- Fetch messages from Firestore
+- Pattern match for decision keywords: "decided", "let's go with", "agreed to"
+- If match, call GPT-4: "What was decided? Extract decision and context"
+- Create decision document in conversations/{id}/decisions
+- Return: {success: boolean, decisions: array}
+- Timeout: 30 seconds
+
+### 6. aiDetectScheduling (HTTPS Callable)
+- Input: conversationId, messageRange (default last 20)
+- Fetch messages from Firestore
+- Pattern match for scheduling keywords: "let's meet", "schedule", "when can"
+- If match, call GPT-4: "Does this indicate scheduling need? Confidence?"
+- If confidence > 70%, fetch participant time zones from users/{uid}/settings
+- Generate 3-5 optimal time slots respecting all time zones
+- Return: {confidence: number, suggestions: [{time: string, formatted: string}]}
+- Timeout: 30 seconds
+
+### 7. onPollComplete (Trigger)
+- Trigger: onUpdate conversations/{id}/polls/{pollId}
+- Check if all participants have voted
+- Check if consensus reached (all voted same option)
+- If yes, create decision entry in conversations/{id}/decisions
+- Include: decision text, poll reference, timestamp, participants
+- Timeout: 10 seconds
 
 ### Shared Utilities
-- `fetchConversationHistory(conversationId, limit, filters)` - bounded retrieval
-- `chunker(messages, maxTokens)` - split into LLM-sized windows
-- `retryWithBackoff(fn, maxRetries)` - resilient API calls
-- `rateLimiter(userId, endpoint, window)` - prevent abuse (10 AI requests/user/min)
-- `telemetry(event, metadata)` - log timings and errors
+- fetchConversationHistory(conversationId, limit): Fetch messages
+- cosineSimilarity(vec1, vec2): Calculate similarity between embeddings
+- retryWithBackoff(fn, maxRetries): Retry logic for API calls
+- rateLimiter(userId, limit): 10 requests per user per minute
+- telemetry(event, data): Log events for monitoring
 
-### Security
-- Validate user has conversation access before processing
-- Cache embeddings for search (vector store or Firestore)
-- Timeout: 30 seconds max per function
-- Log all inputs/outputs (redact PII)
+## Data Model Updates
 
-## Data Model
-
-### Firestore Collections
+### Message Document (Updated)
 ```
-conversations/{id}/
-  - messages/{msgId}
-  - polls/{pollId}
-  - decisions/{decisionId}
-  - ai/
-    - actionItems/{itemId}
-
-users/{uid}/
-  - settings
-  - ephemeral/
-    - summaries/{summaryId}
+conversations/{id}/messages/{msgId}
+{
+  id: string
+  conversationId: string
+  senderId: string
+  senderName: string
+  text: string
+  type: "text" | "image"
+  createdAt: timestamp
+  status: string
+  embedding: array<float>[1536]  // NEW: OpenAI text-embedding-3-small
+  priority?: "urgent" | "high"   // NEW: For priority detection
+  readBy: array<string>
+  deliveredTo: array<string>
+}
 ```
 
-### Realtime Database (Presence)
+### Action Items Collection (NEW)
 ```
-status/{uid}/
-  - online: boolean
-  - lastSeen: timestamp
+conversations/{id}/ai/actionItems/{itemId}
+{
+  id: string
+  conversationId: string
+  title: string
+  assignee?: string
+  dueDate?: timestamp
+  sourceMsgIds: array<string>
+  confidence: number
+  completed: boolean
+  createdAt: timestamp
+  createdBy: string
+  updatedAt: timestamp
+}
+```
+
+### Decisions Collection (NEW)
+```
+conversations/{id}/decisions/{decisionId}
+{
+  id: string
+  conversationId: string
+  text: string
+  sourceMsgIds: array<string>
+  pollId?: string  // If decision came from poll
+  participants: array<string>
+  createdAt: timestamp
+  dismissed: boolean
+}
+```
+
+### Polls Collection (NEW)
+```
+conversations/{id}/polls/{pollId}
+{
+  id: string
+  conversationId: string
+  question: string
+  options: array<string>
+  votes: map<userId, optionIndex>
+  createdBy: string
+  createdAt: timestamp
+  completed: boolean
+  winningOption?: string
+}
+```
+
+### User Settings (NEW)
+```
+users/{uid}/settings
+{
+  timeZone: string  // e.g., "America/Los_Angeles"
+  workHours: {
+    start: string  // e.g., "09:00"
+    end: string    // e.g., "17:00"
+  }
+  preferences: {
+    enableProactiveAssistant: boolean
+    notifyOnUrgent: boolean
+  }
+}
 ```
 
 ## Performance Targets
 
-| Metric | Target | Test Method |
-|--------|--------|-------------|
-| Message delivery (good network) | <200ms | 2 simulators, 20 rapid-fire messages |
-| Offline sync after reconnect | <1s | Airplane mode 30s → reconnect |
-| AI Summarize response | <3s | 50-message conversation |
-| AI Action extraction | <5s | 100-message conversation |
-| AI Search response | <3s | 500-message history |
-| Priority detection | <2s | Real-time on message send |
-| Proactive scheduling | <5s | Triggered on keywords |
-| App launch to chat | <2s | Cold start, warm start |
-| Scroll 1000+ messages | 60 FPS | Long conversation, rapid scroll |
+- Message delivery: < 200ms (optimistic UI)
+- Offline sync after reconnect: < 1 second
+- AI Summarize: < 3 seconds
+- AI Action extraction: < 5 seconds
+- RAG Search (embedding + similarity + LLM): < 3 seconds total
+  - Embedding generation: < 500ms per message
+  - Cosine similarity (500 messages): < 100ms
+  - LLM answer generation: < 2 seconds
+- Priority detection: < 2 seconds
+- Decision tracking: < 5 seconds
+- Proactive scheduling suggestions: < 5 seconds
+- App launch: < 2 seconds
+- Scroll performance: 60 FPS with 1000+ messages
 
-## Rubric Alignment
+## Testing Strategy
 
-### Section 1: Core Messaging (35 points)
-- Real-time delivery <200ms ✅
-- Offline queuing + sync <1s ✅
-- Group chat (3+ users) smooth ✅
+### Automated Testing (Simulator)
+- Use iOS Simulator MCP to autonomously test all features
+- Launch 3 simulators representing different users (PST, EST, GMT time zones)
+- Test scenarios:
+  - Create group chat with 3 users
+  - Send messages with action items, verify extraction
+  - Create poll, all vote same option, verify decision created
+  - Send urgent message, verify red hazard appears
+  - Search with semantic query, verify RAG pipeline returns answer
+  - Toggle airplane mode, send messages offline, reconnect, verify sync < 1s
+  - Test app lifecycle: background/foreground/force quit
+- Take screenshots documenting all working features
 
-### Section 2: Mobile Quality (20 points)
-- Lifecycle handling (background/foreground) ✅
-- Optimistic UI, smooth scrolling, <2s launch ✅
+### Performance Testing
+- Measure message delivery latency (target < 200ms)
+- Measure offline sync latency (target < 1s)
+- Measure AI feature response times (targets listed above)
+- Measure scroll performance with 1000+ messages (target 60 FPS)
+- Stress test: Send 50 messages rapidly, verify no dropped messages
 
-### Section 3: AI Features (30 points)
-- All 5 required features working excellently (14-15 pts)
-- Persona fit with pain point solutions (5 pts)
-- Proactive Assistant fully functional (9-10 pts)
+### Manual Testing
+- Test on physical iOS device for push notifications
+- Test across different network conditions (WiFi, cellular, offline)
+- Test edge cases: very long messages, special characters, emoji
+- Test with real team members to validate UX
 
-### Section 4: Technical (10 points)
-- Clean architecture, secured keys, RAG pipeline (5 pts)
-- Robust auth, local DB, data sync (5 pts)
+## Success Criteria (Rubric Alignment)
 
-### Section 5: Documentation (5 points)
-- Comprehensive README, architecture docs (3 pts)
-- App deployed to simulator/TestFlight (2 pts)
+### Core Messaging (35 points - Already Working)
+- ✅ Real-time message delivery < 200ms
+- ✅ Offline support with queue and sync
+- ✅ Group chat with 3+ participants
+- ✅ Read receipts and typing indicators
+- ✅ Image sharing
 
-**Target**: 90-100 points (A grade)
+### Mobile Quality (20 points - Already Working)
+- ✅ App lifecycle handling (background/foreground/force quit)
+- ✅ Performance targets met (60 FPS scrolling, < 2s launch)
+- ✅ Error handling and loading states
 
-## Security & Privacy
+### AI Features (30 points - NEEDS IMPLEMENTATION)
+This PRD focuses on implementing these features to meet rubric requirements:
 
-### API Keys
-- All AI API keys in Cloud Functions environment variables
-- Never commit keys or bundle in iOS app
-- Use Firebase Admin SDK server-side
+1. ✅ Thread Summarization (working) - 6 points
+2. ❌ Action Items Extraction (broken, needs fix) - 6 points
+3. ❌ Smart Search with RAG (needs full implementation) - 6 points
+4. ❌ Priority Detection (not implemented) - 6 points
+5. ❌ Decision Tracking (not working) - 6 points
+6. ❌ Proactive Assistant (advanced, bonus points)
 
-### Data Access
-- Firestore rules enforce conversation-level access
-- Cloud Functions validate user authorization
-- Redact PII from logs
+**Target**: Implement items 2-6 to achieve 30/30 points in AI Features section
 
-### Privacy
-- Ephemeral AI results stored per-user (not shared)
-- Rate limit: 10 AI requests per user per minute
-- Opt-out mechanism in settings
-- Privacy policy link in app
+### Technical Implementation (10 points)
+- ✅ Clean architecture (MVVM, services)
+- ✅ API keys secured (Cloud Functions only)
+- ❌ RAG pipeline (needs implementation) - 3 points
+- ✅ Authentication working
+- ✅ Data persistence
 
-## Success Criteria
+### Documentation (5 points)
+- Generate: ARCHITECTURE.md, TASKS.md, TESTPLAN.md
+- Update: README.md with setup instructions
+- Create: CHANGELOG.md tracking all changes
 
-### Code & Features
-- All 9 implementation batches completed
-- Zero critical bugs in test scenarios
-- All 5 AI features at "Excellent" rubric tier
-- Proactive Assistant detecting + suggesting times
-- Presence bug fixed
-- AI summary scoped per-user
-- Polls inline in group chats
+**Overall Target**: 93-100 points (A grade, Excellent tier)
 
-### Testing
-- All rubric scenarios passed on simulator
-- Performance targets met
-- No exposed secrets
-- Builds successfully
-- Tested on iOS 16+ simulators
+## Risk Mitigation
 
-### Documentation
-- ARCHITECTURE.md with diagrams
-- README with setup instructions
-- TASKS.md with completion status
-- TESTPLAN.md with results
-- CHANGELOG.md with changes
+### Risk: RAG Pipeline Complexity Too High
+- Mitigation: Start with simple in-memory cosine similarity
+- No external vector DB needed for 500 messages
+- Use OpenAI embeddings (well-documented API)
+- Test with small dataset first
 
-### Rubric Projection
-- Core Messaging: 33-35 pts (Excellent)
-- Mobile Quality: 18-20 pts (Excellent)
-- AI Features: 28-30 pts (Excellent)
-- Technical: 9-10 pts (Excellent)
-- Documentation: 5 pts (Excellent)
-- **Total: 93-100 points (A grade)**
+### Risk: AI Feature Response Times Exceed Targets
+- Mitigation: Implement timeout logic and graceful degradation
+- Cache embeddings to avoid regeneration
+- Use GPT-4o-mini for faster responses where possible
+- Show loading states to manage user expectations
 
+### Risk: Polls Disappearing Bug Hard to Debug
+- Mitigation: Add comprehensive logging to poll lifecycle
+- Check Firestore triggers for race conditions
+- Verify poll persistence before proceeding to consensus detection
+- Test with manual poll creation first
+
+### Risk: Priority Detection False Positives
+- Mitigation: Start with strict keyword matching
+- Add confidence thresholds
+- Allow users to dismiss false positives
+- Track metrics and tune over time
+
+## Implementation Timeline
+
+### Phase 1: Foundation (Hours 1-3)
+- Fix polls disappearing bug
+- Implement decision tracking Cloud Function
+- Create Decisions tab UI
+- Test poll → decision flow
+
+### Phase 2: RAG Pipeline (Hours 4-8)
+- Implement embedding generation on message creation
+- Update message schema with embedding field
+- Implement cosine similarity utility
+- Create semantic search Cloud Function
+- Build RAG search UI
+- Test semantic search with various queries
+
+### Phase 3: Priority Detection (Hours 9-11)
+- Implement priority detection Cloud Function
+- Add priority field to message schema
+- Build priority UI indicators (red hazard, yellow circle)
+- Create priority filter view
+- Test with various urgency levels
+
+### Phase 4: Action Items (Hours 12-16)
+- Implement action extraction Cloud Function
+- Create action items collection
+- Build Action Items panel UI
+- Implement CRUD operations
+- Add offline queue support
+- Test full lifecycle
+
+### Phase 5: Proactive Assistant (Hours 17-20)
+- Create settings screen for time zone and work hours
+- Implement scheduling detection Cloud Function
+- Build time suggestion logic with timezone awareness
+- Create suggestion UI card
+- Implement poll pre-fill
+- Test end-to-end flow
+
+### Phase 6: Testing & Polish (Hours 21-24)
+- Comprehensive testing with iOS Simulator MCP
+- Performance testing and optimization
+- Bug fixes
+- Documentation generation
+- Screenshots for all features
+
+## Exit Criteria
+
+✅ All critical defects fixed:
+  - Action Items fully functional with CRUD UI
+  - Polls saving to Decisions correctly
+  - Priority detection working with visual indicators
+  - Decision tracking auto-logging decisions
+
+✅ All missing AI features implemented:
+  - RAG pipeline with embeddings and semantic search
+  - Proactive Assistant with timezone-aware suggestions
+
+✅ Performance targets met:
+  - Message delivery < 200ms
+  - Offline sync < 1s
+  - AI features under target latencies
+  - 60 FPS scrolling
+
+✅ Documentation complete:
+  - ARCHITECTURE.md
+  - TASKS.md
+  - TESTPLAN.md
+  - README.md updated
+  - CHANGELOG.md created
+
+✅ Testing complete:
+  - All features tested with iOS Simulator MCP
+  - Screenshots captured
+  - Edge cases verified
+  - Performance measured
+
+✅ Rubric requirements met:
+  - 93-100 points target achieved
+  - All AI features working at Excellent level
+  - RAG pipeline fully functional
+  - No critical bugs
+
+---
+
+## Appendix: Example Test Conversations
+
+### Test 1: Action Items
+```
+Alice: Hey team, I need help with the API integration
+Bob: I can help! I'll review the docs today
+Carol: I'll set up the test environment by tomorrow
+Alice: Great! Bob, can you also check the authentication flow?
+Bob: Sure, I'll do that by end of week
+```
+Expected action items:
+- Bob: Review API documentation (today)
+- Carol: Set up test environment (tomorrow)
+- Bob: Check authentication flow (end of week)
+
+### Test 2: Decision Making
+```
+Alice: Should we use PostgreSQL or MongoDB?
+Bob: I think PostgreSQL is better for our use case
+Carol: Agreed, we need ACID compliance
+Alice: Okay, let's go with PostgreSQL then
+Bob: Sounds good, I'll update the tech spec
+```
+Expected decision:
+- "Use PostgreSQL for database" (timestamp, participants: Alice, Bob, Carol)
+
+### Test 3: Priority Detection
+```
+Alice: URGENT: Production is down, database connection failing
+Bob: Working on it now
+Carol: Important: Tomorrow's client demo needs to be rescheduled
+Dave: Hey, what's everyone up to this weekend?
+```
+Expected priorities:
+- Alice's message: URGENT (red hazard)
+- Carol's message: HIGH (yellow circle)
+- Dave's message: NORMAL (no indicator)
+
+### Test 4: Semantic Search
+```
+Conversation contains:
+"Let's sync tomorrow at 3pm EST to discuss the roadmap"
+"I'll be in meetings all morning but free after lunch"
+"Thursday works best for me, anytime after 2pm"
+
+Query: "when are we meeting?"
+Expected answer: "The team is meeting tomorrow at 3pm EST to discuss the roadmap"
+```
+
+### Test 5: Proactive Scheduling
+```
+Alice: We need to discuss the Q4 roadmap
+Bob: Yeah, when can everyone meet?
+Carol: I'm flexible this week
+
+Expected: Suggestion appears within 5 seconds
+"I noticed you're trying to schedule a meeting. Would you like help?"
+[Yes, help me] button
+→ Creates poll with 3-5 timezone-aware time options
+```

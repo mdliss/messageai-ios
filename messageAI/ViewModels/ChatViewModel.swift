@@ -23,6 +23,24 @@ struct SearchResult: Identifiable {
     let snippet: String
 }
 
+/// RAG search response model
+struct RAGSearchResponse {
+    let answer: String
+    let sources: [SearchResult]
+    let stats: SearchStats?
+    let fallbackMode: String?
+}
+
+/// Search statistics
+struct SearchStats {
+    let totalMessages: Int
+    let messagesWithEmbeddings: Int
+    let embeddingLatency: Int
+    let searchLatency: Int
+    let llmLatency: Int
+    let totalLatency: Int
+}
+
 @MainActor
 class ChatViewModel: ObservableObject {
     @Published var messages: [Message] = []
@@ -36,6 +54,8 @@ class ChatViewModel: ObservableObject {
     @Published var hasMoreMessages = true
     @Published var searchResults: [SearchResult] = []
     @Published var isSearching = false
+    @Published var searchAnswer: String? = nil  // NEW: RAG-generated answer
+    @Published var searchStats: SearchStats? = nil  // NEW: Search statistics
     
     private let firestoreService = FirestoreService.shared
     private let coreDataService = CoreDataService.shared
@@ -537,9 +557,9 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    // MARK: - AI Search
+    // MARK: - RAG Search
     
-    /// Search messages using AI semantic search
+    /// Search messages using RAG (Retrieval-Augmented Generation)
     /// - Parameter query: Natural language search query
     func searchMessages(query: String) async {
         guard let conversationId = conversationId else {
@@ -549,68 +569,145 @@ class ChatViewModel: ObservableObject {
         
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             searchResults = []
+            searchAnswer = nil
+            searchStats = nil
             return
         }
         
         isSearching = true
         searchResults = []
+        searchAnswer = nil
+        searchStats = nil
         
-        print("🔍 Starting AI search for: \"\(query)\"")
+        print("🔍 Starting RAG search for: \"\(query)\"")
+        
+        // Check network status for fallback
+        if !networkMonitor.isConnected {
+            print("📡 Offline: Using keyword search fallback")
+            performOfflineKeywordSearch(query: query)
+            return
+        }
         
         do {
             let functions = Functions.functions()
-            let result = try await functions.httpsCallable("searchMessages").call([
+            let result = try await functions.httpsCallable("ragSearch").call([
                 "conversationId": conversationId,
                 "query": query,
                 "limit": 10
             ])
             
-            guard let data = result.data as? [String: Any],
-                  let resultsData = data["results"] as? [[String: Any]] else {
+            guard let data = result.data as? [String: Any] else {
                 throw NSError(domain: "Search", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response format"])
             }
             
-            // Parse search results
-            let parsedResults = resultsData.compactMap { resultDict -> SearchResult? in
-                guard let messageId = resultDict["messageId"] as? String,
-                      let text = resultDict["text"] as? String,
-                      let senderName = resultDict["senderName"] as? String,
-                      let timestampStr = resultDict["timestamp"] as? String,
-                      let score = resultDict["score"] as? Double,
-                      let snippet = resultDict["snippet"] as? String else {
-                    return nil
-                }
-                
-                // Parse timestamp
-                let formatter = ISO8601DateFormatter()
-                let timestamp = formatter.date(from: timestampStr) ?? Date()
-                
-                return SearchResult(
-                    id: messageId,
-                    messageId: messageId,
-                    text: text,
-                    senderName: senderName,
-                    timestamp: timestamp,
-                    score: score,
-                    snippet: snippet
-                )
+            // Parse answer
+            if let answer = data["answer"] as? String {
+                searchAnswer = answer
+                print("💡 RAG Answer: \(answer)")
             }
             
-            searchResults = parsedResults
-            isSearching = false
+            // Parse sources
+            if let sourcesData = data["sources"] as? [[String: Any]] {
+                let parsedResults = sourcesData.compactMap { sourceDict -> SearchResult? in
+                    guard let messageId = sourceDict["messageId"] as? String,
+                          let text = sourceDict["text"] as? String,
+                          let senderName = sourceDict["senderName"] as? String,
+                          let timestampStr = sourceDict["timestamp"] as? String,
+                          let score = sourceDict["score"] as? Double,
+                          let snippet = sourceDict["snippet"] as? String else {
+                        return nil
+                    }
+                    
+                    let formatter = ISO8601DateFormatter()
+                    let timestamp = formatter.date(from: timestampStr) ?? Date()
+                    
+                    return SearchResult(
+                        id: messageId,
+                        messageId: messageId,
+                        text: text,
+                        senderName: senderName,
+                        timestamp: timestamp,
+                        score: score,
+                        snippet: snippet
+                    )
+                }
+                
+                searchResults = parsedResults
+                print("✅ Found \(parsedResults.count) source messages")
+            }
             
-            print("✅ Search complete: found \(parsedResults.count) results")
+            // Parse stats
+            if let statsData = data["stats"] as? [String: Any],
+               let totalMessages = statsData["totalMessages"] as? Int,
+               let messagesWithEmbeddings = statsData["messagesWithEmbeddings"] as? Int,
+               let embeddingLatency = statsData["embeddingLatency"] as? Int,
+               let searchLatency = statsData["searchLatency"] as? Int,
+               let llmLatency = statsData["llmLatency"] as? Int,
+               let totalLatency = statsData["totalLatency"] as? Int {
+                
+                searchStats = SearchStats(
+                    totalMessages: totalMessages,
+                    messagesWithEmbeddings: messagesWithEmbeddings,
+                    embeddingLatency: embeddingLatency,
+                    searchLatency: searchLatency,
+                    llmLatency: llmLatency,
+                    totalLatency: totalLatency
+                )
+                
+                print("📊 Search stats: Total \(totalLatency)ms (Embedding: \(embeddingLatency)ms, Search: \(searchLatency)ms, LLM: \(llmLatency)ms)")
+                print("   Messages: \(messagesWithEmbeddings)/\(totalMessages) have embeddings")
+            }
+            
+            // Check for fallback mode
+            if let fallbackMode = data["fallbackMode"] as? String {
+                print("⚠️ Search used fallback mode: \(fallbackMode)")
+            }
+            
+            isSearching = false
+            print("✅ RAG search complete")
             
         } catch {
             isSearching = false
             errorMessage = "Search failed: \(error.localizedDescription)"
-            print("❌ Search failed: \(error.localizedDescription)")
+            print("❌ RAG search failed: \(error.localizedDescription)")
+            
+            // Fallback to offline keyword search
+            print("🔄 Falling back to offline keyword search...")
+            performOfflineKeywordSearch(query: query)
         }
+    }
+    
+    /// Perform offline keyword search as fallback
+    /// - Parameter query: Search query
+    private func performOfflineKeywordSearch(query: String) {
+        guard let conversationId = conversationId else { return }
+        
+        let messages = coreDataService.searchMessages(query: query)
+            .filter { $0.conversationId == conversationId }
+        
+        searchResults = messages.map { message in
+            SearchResult(
+                id: message.id,
+                messageId: message.id,
+                text: message.text,
+                senderName: message.senderName,
+                timestamp: message.createdAt,
+                score: 0.5,  // Fixed score for keyword matches
+                snippet: message.text.count > 100 ? String(message.text.prefix(100)) + "..." : message.text
+            )
+        }
+        
+        searchAnswer = "Found \(searchResults.count) keyword matches (offline mode)"
+        isSearching = false
+        
+        print("✅ Offline keyword search complete: \(searchResults.count) results")
     }
     
     /// Clear search results
     func clearSearch() {
         searchResults = []
+        searchAnswer = nil
+        searchStats = nil
     }
     
     // MARK: - Cleanup

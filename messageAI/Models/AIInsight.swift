@@ -132,6 +132,9 @@ struct InsightMetadata: Codable, Equatable {
     var winningOption: String?
     var winningTime: String?
     var totalVotes: Int?
+    var pollId: String?           // NEW: Link to original poll
+    var voteCount: Int?            // NEW: Number of votes for winning option
+    var consensusReached: Bool?    // NEW: True if all voted same
     
     init(bulletPoints: Int? = nil,
          messageCount: Int? = nil,
@@ -147,7 +150,10 @@ struct InsightMetadata: Codable, Equatable {
          finalized: Bool? = nil,
          winningOption: String? = nil,
          winningTime: String? = nil,
-         totalVotes: Int? = nil) {
+         totalVotes: Int? = nil,
+         pollId: String? = nil,
+         voteCount: Int? = nil,
+         consensusReached: Bool? = nil) {
         self.bulletPoints = bulletPoints
         self.messageCount = messageCount
         self.approvedBy = approvedBy
@@ -163,6 +169,9 @@ struct InsightMetadata: Codable, Equatable {
         self.winningOption = winningOption
         self.winningTime = winningTime
         self.totalVotes = totalVotes
+        self.pollId = pollId
+        self.voteCount = voteCount
+        self.consensusReached = consensusReached
     }
     
     func toDictionary() -> [String: Any] {
@@ -212,6 +221,15 @@ struct InsightMetadata: Codable, Equatable {
         }
         if let totalVotes = totalVotes {
             dict["totalVotes"] = totalVotes
+        }
+        if let pollId = pollId {
+            dict["pollId"] = pollId
+        }
+        if let voteCount = voteCount {
+            dict["voteCount"] = voteCount
+        }
+        if let consensusReached = consensusReached {
+            dict["consensusReached"] = consensusReached
         }
         
         return dict

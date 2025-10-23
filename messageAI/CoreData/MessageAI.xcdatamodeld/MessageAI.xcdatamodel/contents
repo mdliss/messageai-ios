@@ -25,7 +25,7 @@
         <attribute name="imageURL" optional="YES" attributeType="String"/>
         <attribute name="isSynced" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="localId" optional="YES" attributeType="String"/>
-        <attribute name="priority" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="priorityString" optional="YES" attributeType="String"/>
         <attribute name="readBy" optional="YES" attributeType="String"/>
         <attribute name="senderId" attributeType="String"/>
         <attribute name="senderName" attributeType="String"/>

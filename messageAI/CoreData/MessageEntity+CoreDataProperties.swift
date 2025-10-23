@@ -28,7 +28,7 @@ extension MessageEntity {
     @NSManaged public var readBy: String?
     @NSManaged public var localId: String?
     @NSManaged public var isSynced: Bool
-    @NSManaged public var priority: Bool
+    @NSManaged public var priorityString: String?  // Changed from Bool to String
     @NSManaged public var conversation: ConversationEntity?
     
 }

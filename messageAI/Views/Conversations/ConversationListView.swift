@@ -14,6 +14,7 @@ struct ConversationListView: View {
     @State private var showUserPicker = false
     @State private var showGroupCreation = false
     @State private var showSearch = false
+    @State private var showPriorityFilter = false
     @State private var selectedConversation: Conversation?
     
     private let realtimeDBService = RealtimeDBService.shared
@@ -93,10 +94,19 @@ struct ConversationListView: View {
             .navigationTitle("chats")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showSearch = true
-                    } label: {
-                        Image(systemName: "magnifyingglass")
+                    HStack(spacing: 16) {
+                        Button {
+                            showSearch = true
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        
+                        Button {
+                            showPriorityFilter = true
+                        } label: {
+                            Image(systemName: "flag.fill")
+                                .foregroundStyle(.red)
+                        }
                     }
                 }
                 
@@ -142,6 +152,9 @@ struct ConversationListView: View {
             }
             .sheet(isPresented: $showSearch) {
                 SearchView()
+            }
+            .sheet(isPresented: $showPriorityFilter) {
+                PriorityFilterView()
             }
             .navigationDestination(item: $selectedConversation) { conversation in
                 if let currentUserId = authViewModel.currentUser?.id {

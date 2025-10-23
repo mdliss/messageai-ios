@@ -18,6 +18,14 @@ extension MessageEntity {
         let deliveredToArray = parseStringArray(deliveredTo)
         let readByArray = parseStringArray(readBy)
         
+        // Parse priority from string
+        let messagePriority: MessagePriority? = {
+            if let priorityStr = priorityString {
+                return MessagePriority(rawValue: priorityStr)
+            }
+            return nil
+        }()
+        
         return Message(
             id: id ?? "",
             conversationId: conversationId ?? "",
@@ -33,7 +41,7 @@ extension MessageEntity {
             readBy: readByArray,
             localId: localId,
             isSynced: isSynced,
-            priority: priority
+            priority: messagePriority
         )
     }
     
@@ -53,7 +61,7 @@ extension MessageEntity {
         self.readBy = stringifyArray(message.readBy)
         self.localId = message.localId
         self.isSynced = message.isSynced
-        self.priority = message.priority ?? false
+        self.priorityString = message.priority?.rawValue
     }
     
     /// Parse JSON string array

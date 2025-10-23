@@ -21,6 +21,8 @@ export { detectDecision } from './ai/decisions';
 export { detectProactiveSuggestions } from './ai/proactive';
 export { confirmSchedulingSelection } from './ai/schedulingConfirmation';
 export { searchMessages } from './ai/search';
+export { generateMessageEmbedding } from './ai/embeddings';
+export { ragSearch } from './ai/ragSearch';
 
 console.log('✅ MessageAI Cloud Functions initialized');
 

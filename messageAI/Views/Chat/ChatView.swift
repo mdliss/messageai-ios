@@ -21,6 +21,7 @@ struct ChatView: View {
     @State private var showFullScreenImage: Message?
     @State private var showAIMenu = false
     @State private var showOnlyPriority = false  // Priority filter toggle
+    @State private var showActionItems = false  // Action items panel
     @State private var onlineStatuses: [String: Bool] = [:]  // Track online status per user
     @State private var presenceListeners: [String: Task<Void, Never>] = [:]
     @Environment(\.dismiss) private var dismiss
@@ -35,7 +36,7 @@ struct ChatView: View {
     // Computed property for filtered messages
     private var displayedMessages: [Message] {
         if showOnlyPriority {
-            return viewModel.messages.filter { $0.priority == true }
+            return viewModel.messages.filter { $0.priority == .urgent || $0.priority == .high }
         }
         return viewModel.messages
     }
@@ -264,6 +265,14 @@ struct ChatView: View {
             
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 12) {
+                    // Action Items button
+                    Button {
+                        showActionItems = true
+                    } label: {
+                        Image(systemName: "checklist")
+                            .foregroundStyle(.orange)
+                    }
+                    
                     // Priority filter toggle
                     Button {
                         withAnimation {
@@ -358,6 +367,12 @@ struct ChatView: View {
         }
         .sheet(item: $showFullScreenImage) { message in
             FullScreenImageView(message: message)
+        }
+        .sheet(isPresented: $showActionItems) {
+            ActionItemsView(
+                conversationId: conversation.id,
+                currentUserId: currentUserId
+            )
         }
         .alert("error", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("ok") {
