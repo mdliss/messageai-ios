@@ -29,6 +29,56 @@ interface SearchResult {
   timestamp: string;
   score: number;
   snippet: string;
+  vectorScore?: number;
+  keywordScore?: number;
+}
+
+/**
+ * Calculate keyword match score for a message
+ * Returns score between 0.0 and 1.0 based on keyword presence
+ * 
+ * @param messageText - The message text to search in
+ * @param query - The search query
+ * @returns Keyword match score (0.0 to 1.0)
+ */
+function calculateKeywordScore(messageText: string, query: string): number {
+  const messageLower = messageText.toLowerCase();
+  const queryLower = query.toLowerCase();
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 0);
+  
+  if (queryWords.length === 0) return 0;
+  
+  let score = 0;
+  
+  // Exact full query match: +0.5
+  if (messageLower.includes(queryLower)) {
+    score += 0.5;
+  }
+  
+  // Count matching words
+  let matchingWords = 0;
+  for (const word of queryWords) {
+    if (messageLower.includes(word)) {
+      matchingWords++;
+      
+      // Exact word boundary match: +0.1 per word (up to 0.3)
+      const wordRegex = new RegExp(`\\b${word}\\b`, 'i');
+      if (wordRegex.test(messageText)) {
+        score += 0.1;
+      } else {
+        // Partial match: +0.05 per word
+        score += 0.05;
+      }
+    }
+  }
+  
+  // Bonus for matching all query words: +0.2
+  if (matchingWords === queryWords.length) {
+    score += 0.2;
+  }
+  
+  // Cap at 1.0
+  return Math.min(score, 1.0);
 }
 
 /**
@@ -134,8 +184,8 @@ export const ragSearch = functions
         };
       }
       
-      // STEP 3: Filter messages that have embeddings and calculate similarity
-      console.log(`🔄 Calculating cosine similarities...`);
+      // STEP 3: Calculate HYBRID scores (vector similarity + keyword matching)
+      console.log(`🔄 Calculating hybrid scores (vector + keyword)...`);
       const similarityStartTime = Date.now();
       
       const messagesWithSimilarity = messagesSnapshot.docs
@@ -147,20 +197,34 @@ export const ragSearch = functions
             return null;
           }
           
-          // Calculate cosine similarity
-          const similarity = cosineSimilarity(queryEmbedding, message.embedding);
+          // Calculate vector similarity (semantic search)
+          const vectorScore = cosineSimilarity(queryEmbedding, message.embedding);
+          
+          // Calculate keyword match score (exact/partial matching)
+          const keywordScore = calculateKeywordScore(message.text, query);
+          
+          // HYBRID SCORING: 60% vector similarity + 40% keyword matching
+          // This ensures exact keyword matches rank higher while preserving semantic search benefits
+          const hybridScore = (vectorScore * 0.6) + (keywordScore * 0.4);
           
           return {
             message,
-            similarity
+            vectorScore,
+            keywordScore,
+            hybridScore
           };
         })
-        .filter((item): item is { message: Message; similarity: number } => item !== null);
+        .filter((item): item is { 
+          message: Message; 
+          vectorScore: number;
+          keywordScore: number;
+          hybridScore: number;
+        } => item !== null);
       
       const messagesWithEmbeddings = messagesWithSimilarity.length;
       const similarityLatency = Date.now() - similarityStartTime;
       
-      console.log(`✅ Calculated ${messagesWithEmbeddings} similarities in ${similarityLatency}ms`);
+      console.log(`✅ Calculated ${messagesWithEmbeddings} hybrid scores in ${similarityLatency}ms`);
       console.log(`   Messages with embeddings: ${messagesWithEmbeddings}/${messagesSnapshot.docs.length}`);
       
       // If no messages have embeddings, fall back to keyword search
@@ -200,11 +264,18 @@ export const ragSearch = functions
         };
       }
       
-      // STEP 4: Sort by similarity and take top K
-      messagesWithSimilarity.sort((a, b) => b.similarity - a.similarity);
+      // STEP 4: Sort by hybrid score and take top K
+      messagesWithSimilarity.sort((a, b) => b.hybridScore - a.hybridScore);
       const topMatches = messagesWithSimilarity.slice(0, limit);
       
-      console.log(`📋 Top ${topMatches.length} matches (scores: ${topMatches.map(m => m.similarity.toFixed(3)).join(', ')})`);
+      console.log(`📋 Top ${topMatches.length} matches:`);
+      topMatches.forEach((match, idx) => {
+        const preview = match.message.text.length > 50 
+          ? match.message.text.substring(0, 50) + '...'
+          : match.message.text;
+        console.log(`   ${idx + 1}. "${preview}"`);
+        console.log(`      Hybrid: ${(match.hybridScore * 100).toFixed(1)}% (Vector: ${(match.vectorScore * 100).toFixed(1)}%, Keyword: ${(match.keywordScore * 100).toFixed(1)}%)`);
+      });
       
       // STEP 5: Build context for GPT-4
       const contextMessages = topMatches.map(match => ({
@@ -244,7 +315,7 @@ Provide a clear, specific answer based on the messages above. If the messages do
       
       console.log(`✅ Answer generated in ${llmLatency}ms`);
       
-      // STEP 7: Build search results
+      // STEP 7: Build search results with hybrid scores
       const searchResults: SearchResult[] = topMatches.map(match => {
         const msg = match.message;
         const snippet = msg.text.length > 150 
@@ -256,8 +327,10 @@ Provide a clear, specific answer based on the messages above. If the messages do
           text: msg.text,
           senderName: msg.senderName,
           timestamp: msg.createdAt.toDate().toISOString(),
-          score: match.similarity,
-          snippet: snippet
+          score: match.hybridScore,  // Use hybrid score for ranking
+          snippet: snippet,
+          vectorScore: match.vectorScore,  // Include component scores for debugging
+          keywordScore: match.keywordScore
         };
       });
       

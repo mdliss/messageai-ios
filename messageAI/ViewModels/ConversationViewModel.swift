@@ -94,22 +94,45 @@ class ConversationViewModel: ObservableObject {
                     
                     // Check if user is currently viewing this conversation
                     let isViewingConversation = appStateService.isConversationOpen(conversation.id)
+                    let isInForeground = appStateService.isAppInForeground
                     
-                    // CRITICAL: Only show notifications when app is backgrounded AND not viewing this conversation
-                    // If app is in foreground, user can see the chats tab updating, so notification is redundant
-                    let shouldShowNotification = !isViewingConversation && !appStateService.isAppInForeground
+                    // CRITICAL FIX: Show notifications when:
+                    // - App is in background (always show), OR
+                    // - App is in foreground but user is NOT viewing this specific conversation
+                    // 
+                    // This ensures notifications appear when:
+                    // ✅ App in background
+                    // ✅ App in foreground viewing different conversation
+                    // ✅ App in foreground on different tab (Decisions, AI, Profile, Search)
+                    // ❌ App in foreground viewing THIS conversation (user already sees it)
+                    let shouldShowNotification = !isInForeground || !isViewingConversation
+                    
+                    // Enhanced logging to track notification decisions
+                    print("📬 Message received in conversation: \(conversation.id)")
+                    print("   → Sender: \(latestMessage.senderName)")
+                    print("   → App state: \(isInForeground ? "FOREGROUND" : "BACKGROUND")")
+                    print("   → Current conversation: \(appStateService.currentConversationId ?? "none")")
+                    print("   → Viewing this conversation: \(isViewingConversation ? "YES" : "NO")")
+                    print("   → Decision: \(shouldShowNotification ? "SHOW NOTIFICATION ✅" : "SKIP NOTIFICATION ❌")")
                     
                     if shouldShowNotification {
-                        // Schedule local notification
-                        print("🔔 Scheduling notification for new message in conversation: \(conversation.id)")
+                        let reason: String
+                        if !isInForeground {
+                            reason = "app in background"
+                        } else if !isViewingConversation {
+                            reason = "user viewing different screen"
+                        } else {
+                            reason = "unknown"
+                        }
+                        print("🔔 Scheduling notification: \(reason)")
+                        
                         await notificationService.scheduleLocalNotification(
                             title: latestMessage.senderName,
                             body: latestMessage.previewText,
                             conversationId: conversation.id
                         )
                     } else {
-                        let reason = isViewingConversation ? "user viewing conversation" : "app in foreground"
-                        print("👁️ Skipping notification for \(conversation.id): \(reason)")
+                        print("👁️ Skipping notification: user actively viewing this conversation")
                     }
                 }
             }
