@@ -39,18 +39,20 @@ export const confirmSchedulingSelection = functions
     
     const text = message.text.toLowerCase();
     
-    // Pattern matching for option selection
+    // Pattern matching for EXPLICIT option selection ONLY
+    // Only trigger if user explicitly mentions "option 1", "option 2", or "option 3"
     const optionPattern = /option\s*[123]/i;
-    const agreementPatterns = ['works for me', 'that works', 'sounds good', "i'll take"];
     
     const hasOptionSelection = optionPattern.test(text);
-    const hasAgreement = agreementPatterns.some(pattern => text.includes(pattern));
     
-    if (!hasOptionSelection && !hasAgreement) {
+    // CRITICAL FIX: Do NOT auto-vote on generic agreement phrases
+    // Removed: 'works for me', 'that works', 'sounds good' - these are too generic
+    // Users must explicitly say "option X" to vote
+    if (!hasOptionSelection) {
       return;
     }
     
-    console.log(`📅 Meeting time selection detected: ${message.id}`);
+    console.log(`📅 Explicit option selection detected: ${message.id}`);
     
     try {
       // Fetch recent messages to find scheduling assistant message

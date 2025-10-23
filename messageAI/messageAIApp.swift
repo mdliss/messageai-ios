@@ -43,18 +43,22 @@ struct messageAIApp: App {
         
         Task {
             let realtimeDBService = RealtimeDBService.shared
+            let appStateService = AppStateService.shared
             
             switch phase {
             case .active:
                 print("📱 App became active")
+                appStateService.isAppInForeground = true
                 await realtimeDBService.setUserOnline(userId: userId)
                 await SyncService.shared.processPendingMessages()
                 
             case .inactive:
                 print("📱 App became inactive")
+                appStateService.isAppInForeground = true  // Still in foreground, just inactive
                 
             case .background:
                 print("📱 App entered background")
+                appStateService.isAppInForeground = false  // Now in background, allow notifications
                 await realtimeDBService.setUserOffline(userId: userId)
                 
             @unknown default:

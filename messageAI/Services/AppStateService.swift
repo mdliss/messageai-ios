@@ -15,6 +15,7 @@ class AppStateService: ObservableObject {
     static let shared = AppStateService()
 
     @Published var currentConversationId: String? = nil
+    @Published var isAppInForeground: Bool = true  // Track app foreground state
 
     init() {}
 
