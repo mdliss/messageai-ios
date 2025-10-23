@@ -54,6 +54,8 @@ export const extractActionItems = functions
       
       const messagesSnapshot = await messagesRef.get();
       
+      console.log(`📨 Fetched ${messagesSnapshot.size} messages from conversation`);
+      
       if (messagesSnapshot.empty) {
         throw new functions.https.HttpsError(
           'failed-precondition',
@@ -74,6 +76,9 @@ export const extractActionItems = functions
         }
       }).join('\n');
       
+      console.log(`📝 Transcript prepared with ${messages.length} messages`);
+      console.log(`📋 First 500 chars of transcript: ${transcript.substring(0, 500)}`);
+      
       // Call OpenAI API
       const apiKey = functions.config().openai?.key;
       
@@ -88,68 +93,105 @@ export const extractActionItems = functions
         apiKey: apiKey,
       });
       
+      console.log(`🤖 Calling GPT-4o for action item extraction...`);
+      
       const response = await openai.chat.completions.create({
         model: 'gpt-4o',
-        max_tokens: 1000,
-        temperature: 0.7,
+        max_tokens: 1500,
+        temperature: 0.3,
         messages: [{
           role: 'system',
-          content: 'You are an intelligent assistant extracting SPECIFIC TASKS from team conversations. An action item is a concrete task requiring someone to DO something. Extract tasks with owners and deadlines. Return as JSON array. Never use hyphens.',
+          content: 'You are an expert at extracting actionable tasks from conversations. Your job is to identify concrete tasks that require someone to do something specific. Be generous in your extraction - when in doubt, extract it as an action item. Return ONLY valid JSON array, no markdown, no explanation. Never use hyphens.',
         }, {
           role: 'user',
-          content: `Extract action items from this conversation. An ACTION ITEM is a SPECIFIC TASK requiring someone to DO something concrete.
+          content: `Extract ALL action items from this conversation.
 
-✅ EXTRACT these as action items:
-- Direct assignments: "Bob, review PR #234 by Friday"
-- Personal commitments: "I'll send the report tomorrow"
-- Commands: "You must finish the assignment"
-- Requirements: "Make sure to attend the standup"
-- Imperatives: "Submit the proposal by EOD"
-- Collective tasks: "We need to schedule the meeting"
-- Urgent actions: "ASAP: Review the PR"
+An ACTION ITEM is ANY message that indicates:
+✅ Someone needs to do something
+✅ A task is being assigned or accepted
+✅ A commitment is being made
+✅ An imperative or command is given
+✅ A requirement is stated
 
-❌ DO NOT extract these:
-- Questions without commitment: "Should we meet tomorrow?"
-- Informational statements: "The meeting is tomorrow"
-- Casual suggestions: "Maybe we could grab coffee"
-- Reactions: "That sounds good"
-- Just urgency flags: "Important" or "Urgent" alone without a task
-- Observations: "The deadline is Friday" (just stating fact)
-- Vague possibilities: "We might need to..."
+ALWAYS EXTRACT:
+1. Direct assignments: "Bob, review PR #234 by Friday"
+2. Personal commitments: "I'll send the report tomorrow"
+3. Commands and imperatives: "You must finish the assignment" or "Complete the code review ASAP"
+4. Requirements: "Make sure to attend the standup"
+5. Team actions: "We need to schedule the meeting this week"
+6. Collective tasks: "Someone needs to review the document"
+7. Urgent requests: "URGENT: Production is down"
 
-For EACH action item found, return JSON:
-{
-  "title": "Specific task description (what needs to be done)",
-  "assignee": "Person name if mentioned, or null",
-  "dueDate": "Natural language like 'friday', 'tomorrow', 'next week', or null",
-  "confidence": 0.8,
-  "sourceMsgIds": []
-}
+NEVER EXTRACT:
+- Pure questions with no commitment: "Should we meet?"
+- Simple acknowledgments: "ok" or "sounds good"
+- Pure information: "FYI the meeting moved"
 
-Rules:
-- Extract ONLY specific tasks requiring action
-- Include assignee if mentioned in message
-- Include deadline if mentioned
-- If unsure, lean toward INCLUDING (better to extract than miss)
-- Return empty array [] if no valid action items
+IMPORTANT: When in doubt, EXTRACT IT. Better to have too many than miss important tasks.
+
+Return ONLY a JSON array (no markdown, no code fences, no explanation):
+[
+  {
+    "title": "Clear description of what needs to be done",
+    "assignee": "Name if mentioned or null",
+    "dueDate": "Natural language like friday, tomorrow, next week, or null",
+    "confidence": 0.85,
+    "sourceMsgIds": []
+  }
+]
+
+If no action items found, return: []
 
 Conversation:
-${transcript}`,
+${transcript}
+
+Return ONLY the JSON array:`,
         }],
       });
       
       const responseText = response.choices[0]?.message?.content || '[]';
       
+      console.log(`🤖 GPT-4o raw response:`);
+      console.log(responseText);
+      console.log(`📏 Response length: ${responseText.length} characters`);
+      
       // Parse JSON response
       let parsedItems: any[] = [];
       try {
-        // Extract JSON from response (might have markdown code fences)
-        const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-        const jsonText = jsonMatch ? jsonMatch[0] : responseText;
+        // Try to extract JSON from response
+        // Handle markdown code fences: ```json ... ```
+        let jsonText = responseText.trim();
+        
+        // Remove markdown code fences if present
+        jsonText = jsonText.replace(/^```(?:json)?\s*\n?/i, '');
+        jsonText = jsonText.replace(/\n?```\s*$/i, '');
+        jsonText = jsonText.trim();
+        
+        // If still not starting with [, try to find the array
+        if (!jsonText.startsWith('[')) {
+          const jsonMatch = jsonText.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            jsonText = jsonMatch[0];
+          }
+        }
+        
+        console.log(`🔍 Attempting to parse JSON...`);
+        console.log(`📋 JSON text to parse: ${jsonText.substring(0, 300)}`);
+        
         parsedItems = JSON.parse(jsonText);
-      } catch (error) {
-        console.log('⚠️ Failed to parse JSON, using raw text format');
-        parsedItems = [];
+        
+        console.log(`✅ Successfully parsed ${parsedItems.length} items from GPT response`);
+        
+      } catch (error: any) {
+        console.error('❌ JSON parsing failed!');
+        console.error(`   Error: ${error.message}`);
+        console.error(`   Raw response was: ${responseText}`);
+        
+        // Don't fail silently - throw error so we know something is wrong
+        throw new functions.https.HttpsError(
+          'internal',
+          `Failed to parse AI response as JSON: ${error.message}. Raw response: ${responseText.substring(0, 200)}`
+        );
       }
       
       // CRITICAL FIX: Do NOT create insight popup (would show to all participants)
@@ -163,9 +205,14 @@ ${transcript}`,
         .doc(conversationId)
         .collection('actionItems');
       
+      console.log(`💾 Creating ${parsedItems.length} action item documents in Firestore...`);
+      
       const createdItems: any[] = [];
       
-      for (const item of parsedItems) {
+      for (let i = 0; i < parsedItems.length; i++) {
+        const item = parsedItems[i];
+        console.log(`📝 Processing item ${i + 1}/${parsedItems.length}: "${item.title}"`);
+        
         const itemRef = actionItemsCollection.doc();
         
         // Parse due date if provided
@@ -203,13 +250,19 @@ ${transcript}`,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         };
         
+        console.log(`   ➡️ Title: "${actionItem.title}"`);
+        console.log(`   ➡️ Assignee: ${actionItem.assignee || 'none'}`);
+        console.log(`   ➡️ Due Date: ${dueDate ? dueDate.toISOString() : 'none'}`);
+        console.log(`   ➡️ Confidence: ${actionItem.confidence}`);
+        
         await itemRef.set(actionItem);
         createdItems.push(actionItem);
         
-        console.log(`✅ Created action item: ${item.title}`);
+        console.log(`   ✅ Created in Firestore with ID: ${itemRef.id}`);
       }
       
-      console.log(`✅ Action items extracted: ${createdItems.length} items created`);
+      console.log(`🎉 Action items extraction complete!`);
+      console.log(`   Total items created: ${createdItems.length}`);
       console.log(`   Items will appear in ActionItemsView panel on requesting device only`);
       
       return {

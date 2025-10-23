@@ -32,6 +32,11 @@ service cloud.firestore {
         allow read, write: if isAuthenticated();
       }
       
+      // Action items - SIMPLIFIED FOR MVP
+      match /actionItems/{itemId} {
+        allow read, write: if isAuthenticated();
+      }
+      
       // Typing indicators - SIMPLIFIED FOR MVP
       match /typing/{userId} {
         allow read, write: if isAuthenticated();
