@@ -21,7 +21,16 @@ struct ChatView: View {
     @State private var showFullScreenImage: Message?
     @State private var showAIMenu = false
     @State private var showOnlyPriority = false  // Priority filter toggle
+    @State private var onlineStatuses: [String: Bool] = [:]  // Track online status per user
+    @State private var presenceListeners: [String: Task<Void, Never>] = [:]
     @Environment(\.dismiss) private var dismiss
+    
+    private let realtimeDBService = RealtimeDBService.shared
+    
+    // Computed online count from statuses
+    private var onlineCount: Int {
+        onlineStatuses.values.filter { $0 == true }.count
+    }
     
     // Computed property for filtered messages
     private var displayedMessages: [Message] {
@@ -228,9 +237,27 @@ struct ChatView: View {
                         .font(.headline)
                     
                     if conversation.type == .group {
-                        Text("\(conversation.participantIds.count) members")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Text("\(conversation.participantIds.count) members")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            if onlineCount > 0 {
+                                Text("•")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                
+                                HStack(spacing: 3) {
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 6, height: 6)
+                                    
+                                    Text("\(onlineCount) online")
+                                        .font(.caption)
+                                        .foregroundStyle(.green)
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -295,6 +322,11 @@ struct ChatView: View {
                 currentUserId: currentUserId
             )
             aiViewModel.subscribeToInsights(conversationId: conversation.id, currentUserId: currentUserId)
+            
+            // Subscribe to presence for group chat members
+            if conversation.type == .group {
+                subscribeToGroupPresence()
+            }
         }
         .onDisappear {
             // Clear current conversation from app state
@@ -302,6 +334,9 @@ struct ChatView: View {
             
             viewModel.cleanup()
             aiViewModel.cleanup()
+            
+            // Clean up presence listeners
+            cleanupPresenceListeners()
         }
         .confirmationDialog("add photo", isPresented: $showImagePicker) {
             Button("take photo") {
@@ -384,6 +419,46 @@ struct ChatView: View {
                 currentUserName: userName
             )
         }
+    }
+    
+    // MARK: - Group Presence Tracking
+    
+    /// Subscribe to presence for all group members
+    private func subscribeToGroupPresence() {
+        print("👥 Subscribing to presence for \(conversation.participantIds.count) group members")
+        
+        // Get all participants except current user
+        let otherParticipants = conversation.participantIds.filter { $0 != currentUserId }
+        
+        // Initialize all as offline first
+        for userId in otherParticipants {
+            onlineStatuses[userId] = false
+        }
+        
+        // Subscribe to each participant's presence
+        for userId in otherParticipants {
+            let task = Task {
+                for await isOnline in realtimeDBService.observePresence(userId: userId) {
+                    await MainActor.run {
+                        onlineStatuses[userId] = isOnline
+                        
+                        let onlineNow = onlineStatuses.values.filter { $0 == true }.count
+                        print("👥 Presence update: user \(userId) is \(isOnline ? "ONLINE" : "OFFLINE"), total online: \(onlineNow)/\(otherParticipants.count)")
+                    }
+                }
+            }
+            presenceListeners[userId] = task
+        }
+    }
+    
+    /// Clean up presence listeners
+    private func cleanupPresenceListeners() {
+        print("🧹 Cleaning up \(presenceListeners.count) group presence listeners")
+        for (_, task) in presenceListeners {
+            task.cancel()
+        }
+        presenceListeners.removeAll()
+        onlineStatuses.removeAll()
     }
 }
 
