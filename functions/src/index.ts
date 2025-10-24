@@ -28,6 +28,7 @@ export { ragSearch } from './ai/ragSearch';
 export { generateResponseSuggestions } from './ai/responseSuggestions';
 export { detectBlocker, onMessageCreatedCheckBlocker } from './ai/blockerDetection';
 export { analyzeSentiment, onMessageCreatedAnalyzeSentiment, calculateSentimentAggregates } from './ai/sentiment';
+export { manualAggregateSentiment } from './ai/manualSentimentAggregation';
 
 console.log('✅ MessageAI Cloud Functions initialized');
 
