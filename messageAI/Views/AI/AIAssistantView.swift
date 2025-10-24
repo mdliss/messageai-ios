@@ -33,30 +33,77 @@ struct AIAssistantView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                         
-                        VStack(alignment: .leading, spacing: 12) {
-                            FeatureRow(
-                                icon: "doc.text",
-                                title: "summarize",
-                                description: "get 3 bullet point summaries of long conversations"
-                            )
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Section: Advanced AI Features
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("advanced features")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.blue)
+                                    .padding(.horizontal)
+                                
+                                VStack(spacing: 12) {
+                                    NavigationLink(destination: UnifiedAIDashboardView(currentUserId: authViewModel.currentUser?.id ?? "")) {
+                                        FeatureRow(
+                                            icon: "chart.bar.fill",
+                                            title: "unified ai dashboard",
+                                            description: "see all ai insights in one place"
+                                        )
+                                    }
+                                    
+                                    NavigationLink(destination: BlockerDashboardView(currentUserId: authViewModel.currentUser?.id ?? "")) {
+                                        FeatureRow(
+                                            icon: "exclamationmark.triangle.fill",
+                                            title: "team blockers",
+                                            description: "see when team members are stuck or waiting"
+                                        )
+                                    }
+                                }
+                            }
                             
-                            FeatureRow(
-                                icon: "checklist",
-                                title: "action items",
-                                description: "extract tasks with owners and deadlines"
-                            )
+                            Divider()
+                                .padding(.horizontal)
                             
-                            FeatureRow(
-                                icon: "exclamationmark.triangle",
-                                title: "priority detection",
-                                description: "urgent messages are automatically flagged"
-                            )
-                            
-                            FeatureRow(
-                                icon: "checkmark.circle",
-                                title: "decision tracking",
-                                description: "team decisions are logged automatically"
-                            )
+                            // Section: Core AI Features
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("core features")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal)
+                                
+                                VStack(spacing: 12) {
+                                    FeatureRow(
+                                        icon: "sparkles",
+                                        title: "response suggestions",
+                                        description: "ai suggests replies automatically in chats"
+                                    )
+                                    
+                                    FeatureRow(
+                                        icon: "doc.text",
+                                        title: "summarize",
+                                        description: "get 3 bullet point summaries of long conversations"
+                                    )
+                                    
+                                    FeatureRow(
+                                        icon: "checklist",
+                                        title: "action items",
+                                        description: "extract tasks with owners and deadlines"
+                                    )
+                                    
+                                    FeatureRow(
+                                        icon: "flag.fill",
+                                        title: "priority detection",
+                                        description: "urgent messages are automatically flagged"
+                                    )
+                                    
+                                    FeatureRow(
+                                        icon: "checkmark.circle",
+                                        title: "decision tracking",
+                                        description: "team decisions are logged automatically"
+                                    )
+                                }
+                            }
                         }
                         .padding()
                     }

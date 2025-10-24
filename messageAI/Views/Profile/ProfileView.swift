@@ -120,13 +120,13 @@ struct ProfileView: View {
                 
                 // Settings section
                 Section("settings") {
-                    HStack {
-                        Image(systemName: "sparkles")
-                            .foregroundStyle(.purple)
-                        Text("ai features")
-                        Spacer()
-                        Text("enabled")
-                            .foregroundStyle(.secondary)
+                    NavigationLink(destination: AIFeaturesSettingsView()) {
+                        HStack {
+                            Image(systemName: "sparkles")
+                                .foregroundStyle(.purple)
+                            Text("ai features")
+                            Spacer()
+                        }
                     }
                     
                     Button {

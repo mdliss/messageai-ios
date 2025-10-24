@@ -16,6 +16,7 @@ struct AuthContainerView: View {
             if authViewModel.isAuthenticated {
                 // User is logged in - show main app
                 MainTabView()
+                    .environmentObject(authViewModel)
             } else {
                 // User is not logged in - show login
                 LoginView()
@@ -26,6 +27,8 @@ struct AuthContainerView: View {
 
 /// Main tab view for authenticated users
 struct MainTabView: View {
+    @EnvironmentObject var authViewModel: AuthViewModel
+    
     var body: some View {
         TabView {
             // Conversations tab
@@ -40,8 +43,8 @@ struct MainTabView: View {
                     Label("decisions", systemImage: "list.clipboard")
                 }
             
-            // AI Assistant tab (placeholder for PR #20B)
-            AIAssistantView()
+            // AI Dashboard tab - FIXED: Direct navigation to unified dashboard
+            UnifiedAIDashboardView(currentUserId: authViewModel.currentUser?.id ?? "")
                 .tabItem {
                     Label("ai", systemImage: "sparkles")
                 }

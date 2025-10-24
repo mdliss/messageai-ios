@@ -24,5 +24,10 @@ export { searchMessages } from './ai/search';
 export { generateMessageEmbedding } from './ai/embeddings';
 export { ragSearch } from './ai/ragSearch';
 
+// Export Advanced AI features
+export { generateResponseSuggestions } from './ai/responseSuggestions';
+export { detectBlocker, onMessageCreatedCheckBlocker } from './ai/blockerDetection';
+export { analyzeSentiment, onMessageCreatedAnalyzeSentiment, calculateSentimentAggregates } from './ai/sentiment';
+
 console.log('✅ MessageAI Cloud Functions initialized');
 

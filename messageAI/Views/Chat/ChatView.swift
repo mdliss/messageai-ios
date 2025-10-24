@@ -16,6 +16,7 @@ struct ChatView: View {
     
     @StateObject private var viewModel = ChatViewModel()
     @StateObject private var aiViewModel = AIInsightsViewModel()
+    @StateObject private var suggestionsViewModel = ResponseSuggestionsViewModel()  // NEW: Response suggestions
     @State private var messageText = ""
     @State private var showImagePicker = false
     @State private var selectedImage: UIImage?
@@ -26,6 +27,7 @@ struct ChatView: View {
     @State private var onlineStatuses: [String: Bool] = [:]  // Track online status per user
     @State private var presenceListeners: [String: Task<Void, Never>] = [:]
     @State private var highlightedMessageId: String? = nil
+    @State private var messageForSuggestions: Message? = nil  // NEW: Track message with suggestions
     @Environment(\.dismiss) private var dismiss
     
     init(conversation: Conversation, currentUserId: String, scrollToMessageId: String? = nil) {
@@ -220,6 +222,31 @@ struct ChatView: View {
                 )
             }
             
+            // NEW: Response suggestions card
+            if !suggestionsViewModel.suggestions.isEmpty || suggestionsViewModel.isLoading {
+                ResponseSuggestionsCard(
+                    viewModel: suggestionsViewModel,
+                    onSelectSuggestion: { suggestionText in
+                        // Insert suggestion into message input
+                        messageText = suggestionText
+                        
+                        // Track selection
+                        if let message = messageForSuggestions,
+                           let selectedSuggestion = suggestionsViewModel.suggestions.first(where: { $0.text == suggestionText }) {
+                            suggestionsViewModel.selectSuggestion(
+                                selectedSuggestion,
+                                messageId: message.id,
+                                conversationId: conversation.id
+                            )
+                        }
+                        
+                        // Clear suggestions after selection
+                        suggestionsViewModel.dismissSuggestions()
+                        messageForSuggestions = nil
+                    }
+                )
+            }
+            
             // Message input
             MessageInputView(
                 text: $messageText,
@@ -362,6 +389,23 @@ struct ChatView: View {
                 subscribeToGroupPresence()
             }
         }
+        .onChange(of: viewModel.messages.count) { oldCount, newCount in
+            // Check if new message arrived that needs response
+            guard newCount > oldCount,
+                  let lastMessage = viewModel.messages.last else {
+                return
+            }
+            
+            print("📬 new message arrived, checking if suggestions needed...")
+            
+            // Auto-generate suggestions if message needs response
+            if shouldGenerateSuggestions(for: lastMessage) {
+                print("✅ message needs response, generating suggestions...")
+                generateSuggestionsFor(message: lastMessage)
+            } else {
+                print("⏭️ message doesn't need suggestions")
+            }
+        }
         .onDisappear {
             // Clear current conversation from app state
             AppStateService.shared.clearCurrentConversation()
@@ -430,6 +474,76 @@ struct ChatView: View {
         
         // Clear input immediately for better UX
         messageText = ""
+    }
+    
+    // MARK: - Smart Response Suggestions
+    
+    /// Check if a message should trigger response suggestions
+    private func shouldGenerateSuggestions(for message: Message) -> Bool {
+        // Don't suggest for messages from current user
+        guard message.senderId != currentUserId else { return false }
+        
+        // Don't suggest for image messages
+        guard message.type == .text else { return false }
+        
+        let text = message.text.lowercased()
+        
+        // Trigger conditions:
+        
+        // 1. Message ends with question mark
+        if text.hasSuffix("?") {
+            return true
+        }
+        
+        // 2. Contains request keywords
+        let requestKeywords = [
+            "can we", "can you", "could we", "could you",
+            "should we", "should you", "would you", "would we",
+            "need approval", "need your input", "need you to",
+            "waiting for", "waiting on",
+            "what do you think", "thoughts on", "your thoughts"
+        ]
+        
+        for keyword in requestKeywords {
+            if text.contains(keyword) {
+                return true
+            }
+        }
+        
+        // 3. Message is flagged as priority
+        if message.priority == .urgent || message.priority == .high {
+            return true
+        }
+        
+        // Don't suggest for informational messages
+        let fyiKeywords = ["fyi", "for your information", "just letting you know", "heads up"]
+        for keyword in fyiKeywords {
+            if text.contains(keyword) {
+                return false
+            }
+        }
+        
+        return false
+    }
+    
+    /// Generate suggestions for a message
+    private func generateSuggestionsFor(message: Message) {
+        print("🎯 generating suggestions for message: \(message.id)")
+        
+        // Dismiss any existing suggestions first
+        suggestionsViewModel.dismissSuggestions()
+        
+        // Track which message we're generating suggestions for
+        messageForSuggestions = message
+        
+        // Generate suggestions
+        Task {
+            await suggestionsViewModel.generateSuggestions(
+                for: message,
+                in: conversation.id,
+                currentUserId: currentUserId
+            )
+        }
     }
     
     // MARK: - Send Image

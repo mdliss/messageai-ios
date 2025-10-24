@@ -24,12 +24,15 @@ service cloud.firestore {
       allow update: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
       allow delete: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
       
-      // Messages within conversation
+      // Messages within conversation - Allow participants to delete any message (needed for conversation deletion)
       match /messages/{messageId} {
         allow read: if isAuthenticated();
         allow create: if isAuthenticated();
         allow update: if isAuthenticated();
-        allow delete: if isAuthenticated() && request.auth.uid == resource.data.senderId;
+        // FIXED: Allow deletion if user is conversation participant (not just message sender)
+        // This enables conversation deletion which requires deleting all messages
+        allow delete: if isAuthenticated() && 
+          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
       }
       
       // AI insights - SIMPLIFIED FOR MVP  
@@ -46,6 +49,27 @@ service cloud.firestore {
       match /typing/{userId} {
         allow read, write: if isAuthenticated();
       }
+      
+      // NEW: Blockers - participants can read/write
+      match /blockers/{blockerId} {
+        allow read, write: if isAuthenticated();
+      }
+      
+      // NEW: Polls
+      match /polls/{pollId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+    
+    // NEW: User-specific blocker alerts
+    match /users/{userId}/blockerAlerts/{alertId} {
+      allow read, write: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // NEW: Sentiment tracking aggregates (read-only for managers)
+    match /sentimentTracking/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if false;  // Only cloud functions can write
     }
   }
 }
