@@ -1,0 +1,670 @@
+# Message Deletion, Offline Sync, and Notification Fixes - PRD
+
+## Executive Summary
+
+Fix critical bugs in message deletion, chats list updates, offline sync timing, typing indicators, and notification reliability.
+
+## Problem Statement
+
+### Problem 1: Message Deletion Blocked by Permission Errors
+
+**Current Broken Behavior:**
+- User swipes to delete their own message
+- Deletion fails with: "Permission denied: Missing or insufficient permissions"
+- Error shows: "Write at conversations/[ID] failed: Missing or insufficient permissions"
+- Message deletion used to work but stopped after recent changes
+- Deletion fails in Firestore but succeeds in Core Data (creates inconsistency)
+
+**Expected Correct Behavior:**
+- Users should be able to delete their own messages instantly
+- No permission errors in logs or UI
+- Message disappears from chat view immediately
+- Message deleted from both Core Data and Firestore
+- Other users see the deletion in real-time
+
+**Root Cause:**
+- Security rule at `firestore.rules` line 28 uses: `allow read, write: if isAuthenticated()`
+- The `write` permission covers create, update, AND delete
+- But the rule doesn't verify the user is the message sender
+- For delete operations, we need to check: `request.auth.uid == resource.data.senderId`
+- The generic `isAuthenticated()` check isn't sufficient for delete permissions
+- Need separate `allow delete` rule that verifies ownership
+
+### Problem 2: Deleted Messages Don't Update on Chats List
+
+**Current Broken Behavior:**
+- User deletes last message in a conversation
+- Message disappears from individual chat view (correct)
+- BUT last message preview on chats list still shows the deleted message
+- Chats list becomes stale and inconsistent
+- Opening/closing the chat or app refresh is needed to see correct last message
+
+**Expected Correct Behavior:**
+- When last message is deleted:
+  - Find the new last message (second-to-last message)
+  - Update conversation's `lastMessage` field in Firestore
+  - Update conversation's `lastMessage` in Core Data
+  - Trigger chats list refresh automatically
+  - Show new last message immediately on chats list
+- If no messages remain:
+  - Set `lastMessage` to null
+  - Show placeholder text like "No messages yet" on chats list
+
+**Root Cause:**
+- `ChatViewModel.deleteMessage()` at line 556-595 doesn't update conversation's lastMessage
+- It only deletes from messages collection
+- The conversation document's `lastMessage` field becomes stale
+- `ChatViewModel.loadMessages()` updates lastMessage on load (line 115-118) but not on delete
+- Need to add logic to recalculate and update lastMessage after deletion
+
+### Problem 3: Offline Sync Doesn't Trigger Instantly
+
+**Current Broken Behavior:**
+- User goes offline, sends messages
+- Messages saved locally with `isSynced = false`
+- User comes back online
+- Sync doesn't start immediately
+- Delay of several seconds or sync doesn't happen at all
+- Manual action sometimes needed to trigger sync
+
+**Expected Correct Behavior:**
+- Network status changes from offline to online
+- Within 1 second, `processPendingMessages()` should be called
+- All pending messages upload automatically
+- New messages from other users download
+- All views update with synced data
+- No user intervention required
+
+**Root Cause Analysis:**
+- `SyncService` DOES have a network listener (line 37-43)
+- It subscribes to `.networkConnected` notification
+- `NetworkMonitor.toggleDebugOfflineMode()` DOES post the notification (line 38, 41)
+- But there might be timing issues:
+  - Notification might be posted before listener is set up
+  - Multiple rapid offline/online toggles might miss notifications
+  - `processPendingMessages()` might not be called due to `isSyncing` guard
+- Potential issue: Network reconnection in real scenarios might not post notification reliably
+- Need to ensure notification is always posted and listener always responds
+
+### Problem 4: Typing Indicators Still Show When Offline
+
+**Current Broken Behavior:**
+- Despite recent fixes, typing indicators sometimes still appear when offline
+- Inconsistent behavior - works sometimes, fails other times
+- Might depend on which simulator, timing, or rapid offline/online toggles
+- User reports it's not 100% reliable
+
+**Expected Correct Behavior:**
+- When offline: NEVER send typing updates (100% reliable)
+- When offline: NEVER display typing indicators (100% reliable)
+- No exceptions, no edge cases
+- Works consistently regardless of timing or simulator
+
+**Root Cause Analysis:**
+- Recent fixes added offline checks to:
+  - `updateTypingStatus()` - checks `networkMonitor.isConnected`
+  - `subscribeToTyping()` - checks `networkMonitor.isConnected` in loop
+  - `setupNetworkOfflineListener()` - clears typing on disconnect
+- BUT there might be race conditions:
+  - Typing update sent BEFORE offline check completes
+  - Network state changes DURING typing update transmission
+  - Realtime DB listener receives update BEFORE offline check
+- Need to add additional safeguards:
+  - Check offline state before AND after typing operations
+  - Cancel in-flight typing updates when going offline
+  - Immediately remove typing from Realtime DB when offline
+
+### Problem 5: Notifications Unreliable
+
+**Current Broken Behavior:**
+- Push notifications work sometimes but not consistently
+- Sometimes Device A gets notification, sometimes doesn't
+- Might depend on which simulator was active/focused last
+- Inconsistent across multiple test runs
+- No clear pattern for when they work vs fail
+
+**Expected Correct Behavior:**
+- Notifications work 100% consistently
+- Every new message triggers notification (unless user viewing that conversation)
+- Works in foreground (when viewing different screen)
+- Works in background
+- Works when app closed
+- Each simulator receives notifications independently
+- No dependency on which simulator is focused
+
+**Root Cause Analysis:**
+- Recent fix improved notification logic (ConversationViewModel line 99-136)
+- Changed from AND to OR: `!isInForeground || !isViewingConversation`
+- This SHOULD work, but might have issues:
+  - FCM token not registered for all simulators
+  - Notification permissions not granted on all devices
+  - AppStateService state might be incorrect
+  - `isConversationOpen()` check might be stale
+  - Firebase Cloud Function might not always trigger
+  - Simulator-specific FCM limitations
+- Need to verify:
+  - FCM tokens are valid and registered
+  - Notification permissions granted
+  - AppStateService tracks state accurately
+  - Firebase function always triggers on message create
+  - Notification payload is correct
+
+### Problem 6: General Syncing Inconsistency
+
+**Current Broken Behavior:**
+- Data gets out of sync between views
+- Chat view might show different data than chats list
+- Changes don't propagate everywhere
+- Real-time updates don't always work
+
+**Expected Correct Behavior:**
+- All views use same data source
+- Changes in database trigger updates in all views
+- Chats list and chat view always in sync
+- Real-time listeners work reliably
+
+**Root Cause:**
+- Multiple potential issues:
+  - Some views might not have real-time listeners
+  - Core Data and Firestore might be out of sync
+  - View updates might not trigger after data changes
+- Need to ensure all views listen to Firestore real-time
+- Ensure Core Data stays in sync with Firestore
+- Trigger view refreshes after data changes
+
+## Technical Requirements
+
+### Database Schema
+
+**Messages Collection:**
+```
+conversations/{conversationId}/messages/{messageId}
+{
+  id: string,
+  conversationId: string,
+  senderId: string,         // CRITICAL for delete permissions
+  senderName: string,
+  text: string,
+  createdAt: Timestamp,
+  // ... other fields
+}
+```
+
+**Conversations Collection:**
+```
+conversations/{conversationId}
+{
+  id: string,
+  participantIds: string[],
+  lastMessage: {           // CRITICAL - must update after deletion
+    text: string,
+    senderId: string,
+    timestamp: Timestamp
+  },
+  updatedAt: Timestamp
+}
+```
+
+### Security Rules Requirements
+
+**Messages Delete Rule:**
+```
+match /messages/{messageId} {
+  allow read: if isAuthenticated();
+  allow create: if isAuthenticated();
+  allow update: if isAuthenticated();
+  allow delete: if isAuthenticated() && request.auth.uid == resource.data.senderId;
+}
+```
+
+**Why:** Separate delete permission that verifies user is the message sender
+
+### Message Deletion Flow
+
+**Complete Deletion Process:**
+1. User swipes/taps delete on their message
+2. Verify user is sender (client-side check)
+3. Remove from local messages array (optimistic UI)
+4. Delete from Core Data
+5. Delete from Firestore (security rule verifies sender)
+6. Check if deleted message was last message
+7. If yes, fetch new last message from remaining messages
+8. Update conversation's lastMessage in Firestore
+9. Update conversation's lastMessage in Core Data
+10. Real-time listener updates chats list automatically
+11. If image message, delete image from storage
+12. On error, rollback optimistic UI update
+
+### Chats List Update Requirements
+
+**After Message Deletion:**
+- If deleted message was last message:
+  - Query remaining messages, sort by createdAt desc, get first
+  - Update conversation document with new last message
+  - Use Firestore transaction to ensure consistency
+- If no messages remain:
+  - Set lastMessage to null
+  - Or create placeholder lastMessage
+- Real-time listener on conversations triggers chats list refresh
+- Update happens within 1 second of deletion
+
+### Offline Sync Requirements
+
+**Network Reconnection Detection:**
+- NetworkMonitor posts `.networkConnected` notification
+- SyncService listener MUST respond within 1 second
+- `processPendingMessages()` called automatically
+- No manual intervention required
+
+**Sync Process:**
+- Check `networkMonitor.isConnected` before starting
+- Query Core Data for `isSynced == false` messages
+- Upload each message sequentially
+- Update Core Data with server IDs and `isSynced = true`
+- Download new messages from Firestore
+- Update all views with synced data
+
+**Timing Guarantee:**
+- Sync MUST start within 1 second of reconnection
+- Use immediate task dispatch, no delays
+- Log every step with timestamps
+- Measure actual time from notification to sync start
+
+### Typing Indicator Requirements
+
+**Absolute Rules:**
+- If `networkMonitor.isConnected == false`: NEVER send typing updates
+- If `networkMonitor.isConnected == false`: NEVER display typing indicators
+- If `networkMonitor.debugOfflineMode == true`: NEVER send typing updates
+- If `networkMonitor.debugOfflineMode == true`: NEVER display typing indicators
+
+**Additional Safeguards:**
+- Check network state BEFORE every typing operation
+- Cancel in-flight typing updates when going offline
+- Clear typing from Realtime DB when going offline
+- Double-check network state in typing update callback
+- Log every typing decision with network state
+
+### Notification Requirements
+
+**FCM Token Management:**
+- Register FCM token on app launch
+- Store token in Firestore users collection
+- Refresh token when it changes
+- Verify token is valid before sending notifications
+
+**Notification Triggers:**
+- Firebase Cloud Function triggers on message create
+- Fetch recipient FCM tokens from users collection
+- Send notification to all recipients except sender
+- Log success/failure for each token
+
+**Client-Side Notifications:**
+- Local notifications when:
+  - App in background (always)
+  - App in foreground but not viewing this conversation
+- Skip when actively viewing the conversation
+- Use AppStateService to track current conversation
+- Verify state before showing notification
+
+## Data Flow Diagrams
+
+### Message Deletion Flow
+
+```
+User swipes delete
+  ↓
+Verify sender == currentUser
+  ↓
+Remove from messages array (optimistic)
+  ↓
+Delete from Core Data
+  ↓
+Delete from Firestore → Security rule checks senderId
+  ↓
+Was this the last message? → YES
+  ↓
+Query remaining messages, sort desc, get first
+  ↓
+Update conversation.lastMessage in Firestore
+  ↓
+Update conversation.lastMessage in Core Data
+  ↓
+Real-time listener triggers chats list refresh
+  ↓
+Chats list shows new last message
+```
+
+### Offline Sync Flow
+
+```
+User toggles "Go Online"
+  ↓
+NetworkMonitor.isConnected = true
+  ↓
+NetworkMonitor posts .networkConnected notification
+  ↓
+SyncService listener receives notification (< 1 second)
+  ↓
+Calls processPendingMessages()
+  ↓
+Query Core Data for isSynced == false
+  ↓
+For each message:
+  ├─ Upload to Firestore
+  ├─ Update Core Data: isSynced = true
+  └─ Log: "✅ Synced message"
+  ↓
+Fetch new messages from Firestore
+  ↓
+Update all views
+  ↓
+Sync complete
+```
+
+## Implementation Strategy
+
+### Phase 1: Fix Message Deletion Security Rule (Highest Priority)
+
+**File:** `firestore.rules`
+
+**Change line 27-29 from:**
+```
+match /messages/{messageId} {
+  allow read, write: if isAuthenticated();
+}
+```
+
+**To:**
+```
+match /messages/{messageId} {
+  allow read: if isAuthenticated();
+  allow create: if isAuthenticated();
+  allow update: if isAuthenticated();
+  allow delete: if isAuthenticated() && request.auth.uid == resource.data.senderId;
+}
+```
+
+**Why:** Separate delete permission verifies user owns the message
+
+### Phase 2: Update Chats List After Message Deletion
+
+**File:** `messageAI/ViewModels/ChatViewModel.swift`
+
+**Add to `deleteMessage()` function after successful Firestore deletion:**
+
+```swift
+// Check if deleted message was the last message
+if message.id == messages.last?.id {
+    // Fetch new last message from remaining messages
+    if let newLastMessage = messages.last {
+        // Update conversation's lastMessage
+        try await firestoreService.updateConversationLastMessage(
+            conversationId: conversationId,
+            lastMessage: LastMessage(
+                text: newLastMessage.previewText,
+                senderId: newLastMessage.senderId,
+                timestamp: newLastMessage.createdAt
+            )
+        )
+        
+        // Update Core Data too
+        coreDataService.updateConversationLastMessage(
+            conversationId: conversationId,
+            lastMessage: LastMessage(
+                text: newLastMessage.previewText,
+                senderId: newLastMessage.senderId,
+                timestamp: newLastMessage.createdAt
+            )
+        )
+    } else {
+        // No messages left - set lastMessage to null
+        try await firestoreService.clearConversationLastMessage(conversationId: conversationId)
+    }
+}
+```
+
+**File:** `messageAI/Services/FirestoreService.swift`
+
+**Add new function:**
+```swift
+func updateConversationLastMessage(conversationId: String, lastMessage: LastMessage) async throws {
+    let conversationRef = db.collection("conversations").document(conversationId)
+    try await conversationRef.updateData([
+        "lastMessage": lastMessage.toDictionary(),
+        "updatedAt": lastMessage.timestamp
+    ])
+    print("✅ Updated conversation last message after deletion")
+}
+```
+
+### Phase 3: Ensure Instant Sync on Reconnection
+
+**File:** `messageAI/Services/SyncService.swift`
+
+**Add logging and timing verification:**
+```swift
+private func setupNetworkListener() {
+    NotificationCenter.default.publisher(for: .networkConnected)
+        .sink { [weak self] _ in
+            print("📡 Network connected notification received at \(Date())")
+            Task {
+                print("🔄 Starting sync at \(Date())")
+                await self?.processPendingMessages()
+            }
+        }
+        .store(in: &cancellables)
+}
+```
+
+**Verify timing:**
+- Log timestamp when notification received
+- Log timestamp when sync starts
+- Verify difference is < 1 second
+
+### Phase 4: Bulletproof Typing Indicators
+
+**File:** `messageAI/ViewModels/ChatViewModel.swift`
+
+**Add additional safeguard to `updateTypingStatus()`:**
+```swift
+func updateTypingStatus(isTyping: Bool, currentUserId: String) {
+    guard let conversationId = conversationId else { return }
+    
+    // Double-check offline state
+    guard networkMonitor.isConnected && !networkMonitor.debugOfflineMode else {
+        print("⚠️ Offline: Not sending typing update (double-check)")
+        return
+    }
+    
+    Task {
+        // Triple-check before actual send
+        guard networkMonitor.isConnected else {
+            print("⚠️ Network went offline before sending typing update")
+            return
+        }
+        
+        await realtimeDBService.setTyping(
+            conversationId: conversationId,
+            userId: currentUserId,
+            isTyping: isTyping
+        )
+    }
+}
+```
+
+**Clear typing from Realtime DB when going offline:**
+```swift
+private func setupNetworkOfflineListener() {
+    NotificationCenter.default.publisher(for: .networkDisconnected)
+        .sink { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Clear typing indicators UI
+            self.typingUsers = []
+            
+            // Clear typing status in Realtime DB
+            if let conversationId = self.conversationId, let userId = self.currentUserId {
+                Task {
+                    await self.realtimeDBService.setTyping(
+                        conversationId: conversationId,
+                        userId: userId,
+                        isTyping: false
+                    )
+                }
+            }
+            
+            print("📡 Offline: Cleared typing indicators and Realtime DB")
+        }
+        .store(in: &cancellables)
+}
+```
+
+### Phase 5: Fix Notification Reliability
+
+**Verify FCM Token Registration:**
+
+**File:** `messageAI/Services/AuthService.swift` (if not already present)
+
+**Add token registration after sign in:**
+```swift
+// After successful sign in
+if let fcmToken = await getFCMToken() {
+    try await updateUserFCMToken(userId: user.id, token: fcmToken)
+}
+```
+
+**Add comprehensive logging:**
+
+**File:** `messageAI/ViewModels/ConversationViewModel.swift`
+
+**Enhance existing logging (already present but verify):**
+```swift
+print("📬 Message received: \(latestMessage.id)")
+print("   App foreground: \(isInForeground)")
+print("   Current conversation: \(appStateService.currentConversationId ?? "none")")
+print("   This conversation: \(conversation.id)")
+print("   Should notify: \(shouldShowNotification)")
+```
+
+**Verify Firebase Cloud Function:**
+- Check function logs in Firebase console
+- Verify function triggers on every message create
+- Check FCM tokens are valid
+- Verify notification payload structure
+
+### Phase 6: Ensure View Synchronization
+
+**Verify real-time listeners:**
+- ConversationViewModel subscribes to conversations
+- ChatViewModel subscribes to messages
+- Both update Core Data and UI
+- Views refresh on data changes
+
+**Add onChange handlers:**
+```swift
+.onChange(of: conversationViewModel.conversations) { _, _ in
+    // Chats list auto-refreshes
+}
+
+.onChange(of: chatViewModel.messages) { _, _ in
+    // Chat view auto-refreshes
+}
+```
+
+## Testing Strategy
+
+### Test Case 1: Message Deletion
+- Send 5 messages
+- Delete message #3 → verify no permission error
+- Delete message #5 (last) → verify chats list updates
+- Check logs for: "✅ Message deleted successfully"
+- NO logs for: "❌ Permission denied"
+
+### Test Case 2: Chats List Update
+- Conversation has 3 messages
+- Delete last message
+- Verify chats list immediately shows 2nd message as last
+- Delete that message
+- Verify chats list shows 1st message as last
+
+### Test Case 3: Instant Sync
+- Go offline, send 3 messages
+- Go online
+- Check logs for timestamp of notification received
+- Check logs for timestamp of sync start
+- Verify difference < 1 second
+- Verify all 3 messages sync
+
+### Test Case 4: Typing Indicators
+- Go offline
+- Type - verify NO typing sent (check logs)
+- Other user types - verify NO typing displayed
+- Rapid offline/online toggles - verify always correct
+
+### Test Case 5: Notifications
+- Device A background
+- Device B sends message
+- Verify Device A gets notification within 2 seconds
+- Repeat 5 times - should work 100% of time
+- Check Firebase function logs
+
+### Test Case 6: View Sync
+- Send message on Device B
+- Verify appears on Device A in both chat view and chats list
+- Delete message on Device B
+- Verify disappears on Device A in both views
+
+## Success Criteria
+
+### Message Deletion:
+- [ ] Users can delete own messages without permission errors
+- [ ] Zero "Permission denied" errors in logs
+- [ ] Deletion works in both Firestore and Core Data
+- [ ] Other users see deletion in real-time
+
+### Chats List Updates:
+- [ ] Deleting last message updates chats list automatically
+- [ ] New last message appears within 1 second
+- [ ] Chats list and chat view always synchronized
+- [ ] No stale data after deletion
+
+### Offline Sync:
+- [ ] Sync triggers within 1 second of coming online
+- [ ] Measured and logged timing confirms < 1 second
+- [ ] All pending messages upload successfully
+- [ ] Works every time, no exceptions
+
+### Typing Indicators:
+- [ ] 100% reliable - never shows when offline
+- [ ] Works correctly every time
+- [ ] No race conditions or edge cases
+- [ ] Extensive logging confirms correct behavior
+
+### Notifications:
+- [ ] Work 100% consistently in all scenarios
+- [ ] Foreground notifications when viewing different screen
+- [ ] Background notifications always
+- [ ] FCM tokens registered and valid
+- [ ] Firebase function always triggers
+
+### Code Quality:
+- [ ] All tasks complexity < 7
+- [ ] Surgical fixes only
+- [ ] No build errors or warnings
+- [ ] Extensive logging for debugging
+- [ ] Follows KISS and DRY
+
+## Task Breakdown Philosophy
+
+All tasks MUST have complexity < 7. Break into atomic tasks:
+- "Update security rule for message deletion" (complexity 4)
+- "Add last message update after deletion" (complexity 5)
+- "Add timing logs to sync process" (complexity 3)
+- "Add double-check to typing indicators" (complexity 4)
+- "Verify FCM token registration" (complexity 5)
+- "Test message deletion end-to-end" (complexity 6)
+- etc.
+
+Each task: single file, single function, clear acceptance criteria, independently testable.
+

@@ -127,6 +127,9 @@ class ChatViewModel: ObservableObject {
         
         // Listen for network reconnection to refresh messages
         setupNetworkReconnectionListener()
+        
+        // Listen for network disconnection to clear typing indicators
+        setupNetworkOfflineListener()
     }
     
     // MARK: - Load Older Messages
@@ -193,16 +196,48 @@ class ChatViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
+    /// Set up listener for network disconnection to clear typing indicators
+    private func setupNetworkOfflineListener() {
+        NotificationCenter.default.publisher(for: .networkDisconnected)
+            .sink { [weak self] _ in
+                guard let self = self else { return }
+                
+                // Clear typing indicators UI
+                self.typingUsers = []
+                print("📡 Offline: Cleared typing indicators UI")
+                
+                // Clear own typing status in Realtime DB
+                if let conversationId = self.conversationId, let userId = self.currentUserId {
+                    Task {
+                        await self.realtimeDBService.setTyping(
+                            conversationId: conversationId,
+                            userId: userId,
+                            isTyping: false
+                        )
+                        print("📡 Offline: Cleared typing from Realtime DB for user \(userId)")
+                    }
+                }
+            }
+            .store(in: &cancellables)
+    }
+    
     // MARK: - Typing Indicators
     
     /// Subscribe to typing indicators
     private func subscribeToTyping(conversationId: String, currentUserId: String) {
         typingTask = Task {
             for await typingUserIds in realtimeDBService.observeTyping(conversationId: conversationId) {
+                // Double-check offline state (both flags)
+                guard networkMonitor.isConnected && !networkMonitor.debugOfflineMode else {
+                    self.typingUsers = []
+                    print("⚠️ Offline: Not displaying typing indicators (double-check)")
+                    continue
+                }
+                
                 // Filter out current user
                 let otherUsersTyping = typingUserIds.filter { $0 != currentUserId }
                 self.typingUsers = otherUsersTyping
-                print("⌨️ Typing users: \(otherUsersTyping)")
+                print("⌨️ Typing users: \(otherUsersTyping) (network: \(networkMonitor.isConnected), debug: \(networkMonitor.debugOfflineMode))")
             }
         }
     }
@@ -212,7 +247,19 @@ class ChatViewModel: ObservableObject {
     func updateTypingStatus(isTyping: Bool, currentUserId: String) {
         guard let conversationId = conversationId else { return }
         
+        // Double-check offline state (both flags)
+        guard networkMonitor.isConnected && !networkMonitor.debugOfflineMode else {
+            print("⚠️ Offline: Not sending typing update (double-check)")
+            return
+        }
+        
         Task {
+            // Triple-check before actual send (catch race conditions)
+            guard networkMonitor.isConnected && !networkMonitor.debugOfflineMode else {
+                print("⚠️ Network went offline before sending typing update")
+                return
+            }
+            
             await realtimeDBService.setTyping(
                 conversationId: conversationId,
                 userId: currentUserId,
@@ -555,6 +602,40 @@ class ChatViewModel: ObservableObject {
             }
             
             print("✅ Message deleted successfully: \(message.id)")
+            
+            // Update conversation's last message if we deleted the last message
+            // Note: messages array already has deleted message removed (optimistic UI at line 571)
+            let wasLastMessage = message.id == messages.last?.id || messages.isEmpty
+            
+            if wasLastMessage {
+                if let newLastMessage = messages.last {
+                    // Update Firestore with new last message
+                    try await firestoreService.updateConversationLastMessage(
+                        conversationId: conversationId,
+                        lastMessage: LastMessage(
+                            text: newLastMessage.previewText,
+                            senderId: newLastMessage.senderId,
+                            timestamp: newLastMessage.createdAt
+                        )
+                    )
+                    
+                    // Update Core Data with new last message
+                    coreDataService.updateConversationLastMessage(
+                        conversationId: conversationId,
+                        lastMessage: LastMessage(
+                            text: newLastMessage.previewText,
+                            senderId: newLastMessage.senderId,
+                            timestamp: newLastMessage.createdAt
+                        )
+                    )
+                    
+                    print("✅ Updated conversation last message after deletion")
+                } else {
+                    // No messages left - clear last message
+                    try await firestoreService.clearConversationLastMessage(conversationId: conversationId)
+                    print("✅ Cleared conversation last message (no messages remain)")
+                }
+            }
         } catch {
             // Re-add message if deletion failed
             messages.append(message)

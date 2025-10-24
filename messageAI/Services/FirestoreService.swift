@@ -418,6 +418,30 @@ class FirestoreService {
         print("✅ Message deleted from Firestore: \(messageId)")
     }
     
+    /// Update conversation's last message after deletion
+    /// - Parameters:
+    ///   - conversationId: Conversation ID
+    ///   - lastMessage: New last message
+    func updateConversationLastMessage(conversationId: String, lastMessage: LastMessage) async throws {
+        let conversationRef = db.collection("conversations").document(conversationId)
+        try await conversationRef.updateData([
+            "lastMessage": lastMessage.toDictionary(),
+            "updatedAt": lastMessage.timestamp
+        ])
+        print("✅ Updated conversation last message after deletion: \(conversationId)")
+    }
+    
+    /// Clear conversation's last message (when no messages remain)
+    /// - Parameter conversationId: Conversation ID
+    func clearConversationLastMessage(conversationId: String) async throws {
+        let conversationRef = db.collection("conversations").document(conversationId)
+        try await conversationRef.updateData([
+            "lastMessage": FieldValue.delete(),
+            "updatedAt": Date()
+        ])
+        print("✅ Cleared conversation last message (no messages remain): \(conversationId)")
+    }
+    
     /// Mark messages as read
     /// - Parameters:
     ///   - conversationId: Conversation ID

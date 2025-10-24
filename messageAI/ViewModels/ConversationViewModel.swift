@@ -109,9 +109,12 @@ class ConversationViewModel: ObservableObject {
                     
                     // Enhanced logging to track notification decisions
                     print("📬 Message received in conversation: \(conversation.id)")
+                    print("   → Message ID: \(latestMessage.id)")
                     print("   → Sender: \(latestMessage.senderName)")
+                    print("   → Text: \(latestMessage.previewText)")
                     print("   → App state: \(isInForeground ? "FOREGROUND" : "BACKGROUND")")
                     print("   → Current conversation: \(appStateService.currentConversationId ?? "none")")
+                    print("   → This conversation: \(conversation.id)")
                     print("   → Viewing this conversation: \(isViewingConversation ? "YES" : "NO")")
                     print("   → Decision: \(shouldShowNotification ? "SHOW NOTIFICATION ✅" : "SKIP NOTIFICATION ❌")")
                     

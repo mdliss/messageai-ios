@@ -35,9 +35,20 @@ class SyncService: ObservableObject {
     /// Set up listener for network reconnection
     private func setupNetworkListener() {
         NotificationCenter.default.publisher(for: .networkConnected)
-            .sink { [weak self] _ in
+            .sink { [weak self] notification in
+                let receivedAt = Date()
+                print("📡 Network connected notification received at \(receivedAt)")
+                
                 Task {
+                    let syncStartedAt = Date()
+                    let delay = syncStartedAt.timeIntervalSince(receivedAt)
+                    print("🔄 Starting sync at \(syncStartedAt) (delay: \(String(format: "%.3f", delay))s)")
+                    
                     await self?.processPendingMessages()
+                    
+                    let syncEndedAt = Date()
+                    let duration = syncEndedAt.timeIntervalSince(syncStartedAt)
+                    print("✅ Sync completed at \(syncEndedAt) (duration: \(String(format: "%.3f", duration))s)")
                 }
             }
             .store(in: &cancellables)

@@ -1,0 +1,501 @@
+# Offline Messaging and Typing Indicators Fix - PRD
+
+## Executive Summary
+
+Fix critical bugs in offline messaging system where:
+1. Typing indicators appear when users are offline (impossible state)
+2. 23 pending messages fail to sync with "Permission denied" errors
+3. Messages sent while offline never reach other users after coming back online
+
+## Problem Statement
+
+### Problem 1: Typing Indicators Show When User is Offline
+
+**Current Broken Behavior:**
+- When Device A enables offline mode, Device B sees "User A is typing"
+- When Device A is offline and Device B types, Device A shows "User B is typing"
+- Offline devices send typing status updates to Realtime Database
+- Offline devices receive and display typing indicators from others
+
+**Expected Correct Behavior:**
+- When device goes offline, immediately stop sending typing updates
+- When device is offline, don't display typing indicators at all
+- Typing indicators only work when both users are online and connected
+- Going back online resumes normal typing indicator functionality
+
+**Root Cause:**
+- `ChatViewModel.updateTypingStatus()` at line 212-221 doesn't check `NetworkMonitor.isConnected` before calling `realtimeDBService.setTyping()`
+- `subscribeToTyping()` at line 199-207 doesn't check offline state before displaying typing users
+- No validation that prevents typing indicator updates when `debugOfflineMode = true` or `isConnected = false`
+
+### Problem 2: Messages Don't Sync When Coming Back Online
+
+**Current Broken Behavior:**
+- User goes offline and sends 23 messages
+- Messages show "Not Delivered" status
+- User comes back online
+- Sync process starts: "🔄 Syncing 23 pending messages..."
+- All 23 uploads fail with "Missing or insufficient permissions"
+- After 3 retry attempts per message, all marked as "failed"
+- Messages never reach the other user
+- Permanent data loss - messages stay failed forever
+
+**Expected Correct Behavior:**
+- Messages created offline saved locally with `isSynced = false`
+- When coming back online, sync process auto-starts
+- Each pending message uploads to Firestore successfully
+- Message status changes from "sending" → "sent"
+- Other user receives all messages within 2-3 seconds
+- Messages appear in correct chronological order
+- No permission errors, no data loss
+
+**Root Cause:**
+- Firestore security rules at line 22 in `firestore.rules`: `allow read, write: if isAuthenticated() && request.auth.uid in resource.data.participantIds;`
+- Uses `resource.data.participantIds` which only exists for existing documents
+- When `SyncService.uploadMessageWithRetry()` calls `FirestoreService.sendMessage()`, it updates conversation document (lines 380-382)
+- For update operations, `resource.data` can be null or unavailable during certain transaction states
+- The rule needs to check BOTH `resource.data` (existing) and `request.resource.data` (incoming)
+
+### Problem 3: Database Permission Errors
+
+**Current Broken Behavior:**
+- Logs show: "❌ Failed to sync message: Missing or insufficient permissions"
+- Firebase rejects writes to paths like: `conversations/A91EF96A-F879-4E3A-9AAE-0CB2B94CEA0B`
+- Error occurs when trying to update `lastMessage` field on conversation document
+- Retry mechanism attempts 3 times with exponential backoff (1s, 2s, 4s delays)
+- All retries fail with same permission error
+- Messages permanently marked as "failed" after all retries exhausted
+
+**Expected Correct Behavior:**
+- Security rules allow authenticated users to write messages to their conversations
+- Update operations on conversation documents succeed when user is a participant
+- No permission errors during normal sync operations
+- Successful sync with proper logging: "✅ Synced message: [messageId]"
+
+**Root Cause:**
+- Same as Problem 2 - security rule doesn't handle all cases of document access
+- Rule must check: `isAuthenticated() && request.auth.uid in (resource.data.participantIds || request.resource.data.participantIds)`
+- This handles both existing document updates and new document creation
+
+## Technical Requirements
+
+### Database Schema
+
+**Messages Structure (Firestore):**
+```
+conversations/{conversationId}/messages/{messageId}
+{
+  id: string,
+  conversationId: string,
+  senderId: string,
+  senderName: string,
+  senderPhotoURL: string?,
+  senderAvatarType: string?,
+  senderAvatarId: string?,
+  type: "text" | "image",
+  text: string,
+  imageURL: string?,
+  createdAt: Timestamp,
+  status: "sending" | "sent" | "delivered" | "read" | "failed",
+  deliveredTo: string[],
+  readBy: string[],
+  isSynced: boolean,
+  localId: string?,
+  priority: string?,
+  embedding: float[]?
+}
+```
+
+**Conversation Structure (Firestore):**
+```
+conversations/{conversationId}
+{
+  id: string,
+  type: "direct" | "group",
+  participantIds: string[],
+  participantDetails: map,
+  lastMessage: {
+    text: string,
+    senderId: string,
+    timestamp: Timestamp
+  },
+  updatedAt: Timestamp,
+  createdAt: Timestamp
+}
+```
+
+**Core Data Structure:**
+- MessageEntity mirrors Firestore Message schema
+- `isSynced` flag indicates if uploaded to Firestore
+- `localId` used for tracking before server ID assigned
+
+### Security Rules Requirements
+
+**Current Broken Rule:**
+```
+match /conversations/{conversationId} {
+  allow read, write: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
+}
+```
+
+**Fixed Rule:**
+```
+match /conversations/{conversationId} {
+  allow read: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
+  allow create: if isAuthenticated() && request.auth.uid in request.resource.data.participantIds;
+  allow update: if isAuthenticated() && request.auth.uid in (resource.data.participantIds);
+}
+```
+
+### Typing Indicator Requirements
+
+**When to Send Typing Updates:**
+- Only when `NetworkMonitor.isConnected == true`
+- Only when `NetworkMonitor.debugOfflineMode == false`
+- User must be actively typing (text field has focus and text changing)
+- Stop sending after 3 seconds of inactivity
+- Stop sending when text field loses focus
+- Stop sending when user presses send
+
+**When to Display Typing Indicators:**
+- Only when `NetworkMonitor.isConnected == true`
+- Only when `NetworkMonitor.debugOfflineMode == false`
+- Filter out current user from typing users list
+- Show names of users who are typing
+- Auto-remove typing indicator after 10 seconds if not updated
+
+**When to Ignore Typing Updates:**
+- When device is offline (`isConnected == false`)
+- When debug offline mode enabled (`debugOfflineMode == true`)
+- When app is in background
+- When conversation is not currently open
+
+### Message Sync Requirements
+
+**Detection of Pending Messages:**
+- Query Core Data for messages where `isSynced == false`
+- Order by `createdAt` ascending (oldest first)
+- Include all message fields required for Firestore upload
+
+**Upload Process:**
+- For each pending message in order:
+  - Verify user is authenticated
+  - Call `FirestoreService.sendMessage()` with full message object
+  - Wait for server response with new message ID
+  - On success: update Core Data with `serverId`, set `isSynced = true`, status = "sent"
+  - On failure: log error, retry up to 3 times with exponential backoff
+  - After 3 failures: keep message in pending queue for manual retry later
+
+**Retry Logic:**
+- Max 3 attempts per message
+- Delays: 1 second, 2 seconds, 4 seconds (exponential backoff)
+- Each retry is a full upload attempt
+- Different error types handled appropriately (network vs permission vs data errors)
+
+**Error Handling:**
+- Network errors: retry automatically
+- Permission errors: log and fail (shouldn't happen after fix)
+- Authentication errors: refresh auth token and retry
+- Data errors: log detailed error and mark message as failed
+
+### Network State Management
+
+**Offline Mode Detection:**
+- `NetworkMonitor.isConnected` = false when no network
+- `NetworkMonitor.debugOfflineMode` = true when user toggles debug mode
+- Either condition means "offline" for app purposes
+
+**Going Offline Flow:**
+1. Network becomes unavailable or user toggles offline mode
+2. `NetworkMonitor.isConnected` becomes false
+3. Stop all typing indicator updates immediately
+4. Clear any displayed typing indicators
+5. Messages sent after this point saved locally only with `isSynced = false`
+6. UI shows "Not Delivered" or "Sending" status for these messages
+
+**Coming Online Flow:**
+1. Network becomes available or user toggles online mode
+2. `NetworkMonitor.isConnected` becomes true
+3. NotificationCenter posts `networkConnected` notification
+4. `SyncService` receives notification and calls `processPendingMessages()`
+5. Resume typing indicator functionality
+6. All pending messages upload sequentially
+7. UI updates to show "Sent" status as each message syncs
+
+## Data Flow Diagrams
+
+### Typing Indicator Flow (Offline → Online)
+
+**Device A Goes Offline:**
+```
+User toggles "Go Offline" 
+  ↓
+NetworkMonitor.debugOfflineMode = true
+  ↓
+NetworkMonitor.isConnected = false
+  ↓
+ChatViewModel checks isConnected before setTyping()
+  ↓
+No typing updates sent to Realtime DB
+  ↓
+Device B sees no typing indicator (correct)
+```
+
+**Device A Comes Back Online:**
+```
+User toggles "Go Online"
+  ↓
+NetworkMonitor.debugOfflineMode = false
+  ↓
+NetworkMonitor.isConnected = true
+  ↓
+User starts typing
+  ↓
+ChatViewModel checks isConnected = true
+  ↓
+setTyping() called normally
+  ↓
+Device B receives typing update and displays indicator
+```
+
+### Message Sync Flow (Offline → Online)
+
+**Creating Message While Offline:**
+```
+User types message and sends
+  ↓
+ChatViewModel.sendMessage() called
+  ↓
+Creates Message object with localId, isSynced=false, status=sending
+  ↓
+Saves to Core Data
+  ↓
+Checks NetworkMonitor.isConnected → FALSE
+  ↓
+Returns early without uploading to Firestore
+  ↓
+UI shows "Not Delivered"
+```
+
+**Coming Back Online and Syncing:**
+```
+Network reconnects
+  ↓
+NetworkMonitor posts networkConnected notification
+  ↓
+SyncService receives notification
+  ↓
+Calls processPendingMessages()
+  ↓
+Queries Core Data for isSynced=false messages
+  ↓
+For each message:
+  ├─ Call uploadMessageWithRetry()
+  ├─ FirestoreService.sendMessage() uploads message
+  ├─ Updates conversation.lastMessage
+  ├─ Firestore security rule checks request.auth.uid in resource.data.participantIds
+  ├─ (AFTER FIX) Also checks request.resource.data.participantIds
+  ├─ Permission granted → success
+  ├─ Returns server message ID
+  ├─ Update Core Data: isSynced=true, id=serverId, status=sent
+  └─ UI updates to show "Sent"
+```
+
+## Implementation Strategy
+
+### Phase 1: Fix Firestore Security Rules (Highest Priority)
+This is the root cause of the permission errors blocking all sync operations.
+
+**File:** `firestore.rules`
+
+**Change:**
+Line 22 from:
+```
+allow read, write: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
+```
+
+To:
+```
+allow read: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
+allow create: if isAuthenticated() && request.auth.uid in request.resource.data.participantIds;
+allow update: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
+```
+
+**Why:** Separates read/create/update rules. Create operations use `request.resource.data` (the incoming document), update operations use `resource.data` (the existing document).
+
+### Phase 2: Stop Typing Updates When Offline
+
+**File:** `messageAI/ViewModels/ChatViewModel.swift`
+
+**Function:** `updateTypingStatus(isTyping:currentUserId:)` at line 212
+
+**Add Check:**
+```swift
+func updateTypingStatus(isTyping: Bool, currentUserId: String) {
+    guard let conversationId = conversationId else { return }
+    
+    // NEW: Don't send typing updates if offline
+    guard networkMonitor.isConnected else {
+        print("⚠️ Offline: Not sending typing update")
+        return
+    }
+    
+    Task {
+        await realtimeDBService.setTyping(
+            conversationId: conversationId,
+            userId: currentUserId,
+            isTyping: isTyping
+        )
+    }
+}
+```
+
+### Phase 3: Prevent Displaying Typing When Offline
+
+**File:** `messageAI/ViewModels/ChatViewModel.swift`
+
+**Function:** `subscribeToTyping(conversationId:currentUserId:)` at line 199
+
+**Add Check:**
+```swift
+private func subscribeToTyping(conversationId: String, currentUserId: String) {
+    typingTask = Task {
+        for await typingUserIds in realtimeDBService.observeTyping(conversationId: conversationId) {
+            // NEW: Don't display typing indicators if offline
+            guard networkMonitor.isConnected else {
+                self.typingUsers = []
+                print("⚠️ Offline: Not displaying typing indicators")
+                continue
+            }
+            
+            // Filter out current user
+            let otherUsersTyping = typingUserIds.filter { $0 != currentUserId }
+            self.typingUsers = otherUsersTyping
+            print("⌨️ Typing users: \(otherUsersTyping)")
+        }
+    }
+}
+```
+
+### Phase 4: Clear Typing When Going Offline
+
+**File:** `messageAI/ViewModels/ChatViewModel.swift`
+
+**Add Network Listener:**
+```swift
+private func setupNetworkOfflineListener() {
+    NotificationCenter.default.publisher(for: .networkDisconnected)
+        .sink { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Clear typing indicators when going offline
+            self.typingUsers = []
+            print("📡 Offline: Cleared typing indicators")
+        }
+        .store(in: &cancellables)
+}
+```
+
+Call this in `loadMessages()` or during initialization.
+
+### Phase 5: Comprehensive Testing
+
+**Test Case 1: Typing Indicators Respect Offline State**
+- Open conversation on two devices
+- Device A toggles "Go Offline"
+- Verify: Device A typing doesn't show on Device B
+- Verify: Device B typing doesn't show on Device A
+- Device A toggles "Go Online"
+- Verify: Typing indicators resume working
+
+**Test Case 2: Messages Sync Without Permission Errors**
+- Device A goes offline
+- Send 5 messages on Device A
+- Verify: All show "Not Delivered" or "Sending"
+- Device A goes online
+- Verify: All 5 messages sync successfully
+- Verify: Logs show "✅ Synced message" (no permission errors)
+- Verify: Device B receives all 5 messages
+- Verify: Messages appear in correct order
+
+**Test Case 3: Multiple Offline/Online Cycles**
+- Device A: offline → 3 messages → online (sync)
+- Device B: offline → 2 messages → online (sync)
+- Device A: offline → 5 messages → online (sync)
+- Verify: All messages sync without errors
+- Verify: Both devices have complete conversation history
+
+## Success Criteria
+
+### Typing Indicators
+- [ ] Offline device doesn't send typing updates
+- [ ] Offline device doesn't display typing indicators
+- [ ] Online device doesn't show typing from offline users
+- [ ] Going offline immediately clears displayed typing indicators
+- [ ] Coming online resumes normal typing functionality
+- [ ] No typing indicator bugs in any offline/online state combination
+
+### Message Syncing
+- [ ] Messages created offline have correct structure with all required fields
+- [ ] Coming online automatically triggers sync process
+- [ ] All pending messages upload to Firestore successfully
+- [ ] Zero "Permission denied" errors in logs or Firebase console
+- [ ] Message status updates from "sending" → "sent" after sync
+- [ ] Other users receive synced messages within 2-3 seconds
+- [ ] Messages appear in chronological order
+- [ ] Can send 10+ messages offline and sync all successfully
+
+### Security & Permissions
+- [ ] Firestore security rules allow authenticated participants to update conversations
+- [ ] Security rules work for both create and update operations
+- [ ] No permission errors during any normal app operations
+- [ ] Authentication remains valid during offline/online transitions
+
+### Reliability & Error Handling
+- [ ] No messages lost during sync
+- [ ] No duplicate messages created
+- [ ] Proper error logging with specific error types
+- [ ] Retry logic works correctly (max 3 attempts with exponential backoff)
+- [ ] Failed messages remain in queue for manual retry (not lost)
+
+### Code Quality
+- [ ] All changes are surgical - only modify what's necessary
+- [ ] No existing functionality broken
+- [ ] Code follows KISS and DRY principles
+- [ ] Comprehensive logging at each step
+- [ ] Clear error messages for debugging
+
+## Implementation Scope
+
+**Files to Modify:**
+1. `firestore.rules` - Fix security rules for conversation updates
+2. `messageAI/ViewModels/ChatViewModel.swift` - Add offline checks for typing indicators
+3. No changes needed to `SyncService.swift` - it already works correctly once permissions fixed
+
+**Files NOT to Modify:**
+- `SyncService.swift` - Already has correct sync logic
+- `FirestoreService.swift` - Already has correct upload logic
+- `NetworkMonitor.swift` - Already works correctly
+- `RealtimeDBService.swift` - Already works correctly
+- Core Data models - Already have correct schema
+
+**Total Scope:** 2 files modified, approximately 20 lines of code changed
+
+## Task Breakdown Philosophy
+
+Each task must have complexity score LESS THAN 7. Tasks should be:
+- Specific and actionable
+- Independently testable
+- Single responsibility
+- Clear acceptance criteria
+
+Break down into atomic tasks like:
+- "Add offline check to updateTypingStatus function" (complexity 2)
+- "Add offline check to subscribeToTyping function" (complexity 3)
+- "Update Firestore security rules for conversation updates" (complexity 4)
+- "Add network disconnection listener to clear typing indicators" (complexity 3)
+- "Test typing indicators with offline/online transitions" (complexity 5)
+- "Test message sync with multiple pending messages" (complexity 6)
+
+Each task should be completable in one focused work session without requiring deep context switching or multiple file changes.
+
