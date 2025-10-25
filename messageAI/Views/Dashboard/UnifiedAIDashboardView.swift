@@ -222,9 +222,11 @@ struct UnifiedAIDashboardView: View {
             groupConversationId = nil
         }
 
-        // TODO: Load actual counts from Firestore
-        blockerCount = 0
-        suggestionsAvailable = 0
+        // Load blocker count
+        await loadBlockerCount()
+
+        // Load available suggestions count
+        await loadSuggestionsCount()
     }
 
     private func loadTodaysSentiment(conversationId: String) async {
@@ -253,6 +255,72 @@ struct UnifiedAIDashboardView: View {
         } catch {
             print("❌ [DASHBOARD] error loading sentiment preview: \(error)")
             teamSentimentScore = 0.0
+        }
+    }
+
+    private func loadBlockerCount() async {
+        do {
+            let db = Firestore.firestore()
+
+            // Count active blockers across all conversations where user is a participant
+            let conversationsSnapshot = try await db.collection("conversations")
+                .whereField("participantIds", arrayContains: currentUserId)
+                .getDocuments()
+
+            var totalBlockers = 0
+
+            for conversationDoc in conversationsSnapshot.documents {
+                let blockersSnapshot = try await db.collection("conversations")
+                    .document(conversationDoc.documentID)
+                    .collection("blockers")
+                    .whereField("resolved", isEqualTo: false)
+                    .getDocuments()
+
+                totalBlockers += blockersSnapshot.documents.count
+            }
+
+            blockerCount = totalBlockers
+            print("✅ [DASHBOARD] loaded blocker count: \(totalBlockers)")
+        } catch {
+            print("❌ [DASHBOARD] error loading blocker count: \(error)")
+            blockerCount = 0
+        }
+    }
+
+    private func loadSuggestionsCount() async {
+        do {
+            let db = Firestore.firestore()
+
+            // Count messages with unexpired suggestions across all conversations
+            let conversationsSnapshot = try await db.collection("conversations")
+                .whereField("participantIds", arrayContains: currentUserId)
+                .getDocuments()
+
+            var totalSuggestions = 0
+            let now = Date()
+
+            for conversationDoc in conversationsSnapshot.documents {
+                let messagesSnapshot = try await db.collection("conversations")
+                    .document(conversationDoc.documentID)
+                    .collection("messages")
+                    .whereField("senderId", isNotEqualTo: currentUserId)
+                    .limit(to: 20)
+                    .getDocuments()
+
+                for messageDoc in messagesSnapshot.documents {
+                    if let suggestions = messageDoc.data()["responseSuggestions"] as? [String: Any],
+                       let expiresAt = suggestions["expiresAt"] as? Timestamp,
+                       expiresAt.dateValue() > now {
+                        totalSuggestions += 1
+                    }
+                }
+            }
+
+            suggestionsAvailable = totalSuggestions
+            print("✅ [DASHBOARD] loaded suggestions count: \(totalSuggestions)")
+        } catch {
+            print("❌ [DASHBOARD] error loading suggestions count: \(error)")
+            suggestionsAvailable = 0
         }
     }
 }

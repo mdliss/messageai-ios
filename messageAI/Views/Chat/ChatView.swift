@@ -356,17 +356,6 @@ struct ChatView: View {
                         } label: {
                             Label("summarize", systemImage: "doc.text")
                         }
-                        
-                        Divider()
-                        
-                        Button {
-                            NetworkMonitor.shared.toggleDebugOfflineMode()
-                        } label: {
-                            Label(
-                                NetworkMonitor.shared.debugOfflineMode ? "go online (debug)" : "go offline (debug)",
-                                systemImage: NetworkMonitor.shared.debugOfflineMode ? "wifi" : "wifi.slash"
-                            )
-                        }
                     } label: {
                         Image(systemName: "sparkles")
                     }
