@@ -32,6 +32,7 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
     var isSynced: Bool
     var priority: MessagePriority?  // NEW: Priority level (urgent, high, normal)
     var embedding: [Float]?  // NEW: OpenAI text-embedding-3-small (1536 floats)
+    var mentionedUserIds: [String]?  // NEW: User IDs mentioned in this message
     
     /// Initialize message
     init(id: String = UUID().uuidString,
@@ -51,7 +52,8 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
          localId: String? = nil,
          isSynced: Bool = false,
          priority: MessagePriority? = nil,
-         embedding: [Float]? = nil) {
+         embedding: [Float]? = nil,
+         mentionedUserIds: [String]? = nil) {
         self.id = id
         self.conversationId = conversationId
         self.senderId = senderId
@@ -70,6 +72,7 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         self.isSynced = isSynced
         self.priority = priority
         self.embedding = embedding
+        self.mentionedUserIds = mentionedUserIds
     }
     
     /// Convert to Firestore dictionary
@@ -109,7 +112,10 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         if let embedding = embedding {
             dict["embedding"] = embedding
         }
-        
+        if let mentionedUserIds = mentionedUserIds {
+            dict["mentionedUserIds"] = mentionedUserIds
+        }
+
         return dict
     }
     

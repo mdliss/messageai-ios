@@ -28,6 +28,8 @@ struct ChatView: View {
     @State private var presenceListeners: [String: Task<Void, Never>] = [:]
     @State private var highlightedMessageId: String? = nil
     @State private var messageForSuggestions: Message? = nil  // NEW: Track message with suggestions
+    @State private var showMentionPicker = false  // NEW: Show mention picker
+    @State private var mentionSearchText = ""  // NEW: Track @ search
     @Environment(\.dismiss) private var dismiss
     
     init(conversation: Conversation, currentUserId: String, scrollToMessageId: String? = nil) {
@@ -229,7 +231,7 @@ struct ChatView: View {
                     onSelectSuggestion: { suggestionText in
                         // Insert suggestion into message input
                         messageText = suggestionText
-                        
+
                         // Track selection
                         if let message = messageForSuggestions,
                            let selectedSuggestion = suggestionsViewModel.suggestions.first(where: { $0.text == suggestionText }) {
@@ -239,14 +241,27 @@ struct ChatView: View {
                                 conversationId: conversation.id
                             )
                         }
-                        
+
                         // Clear suggestions after selection
                         suggestionsViewModel.dismissSuggestions()
                         messageForSuggestions = nil
                     }
                 )
             }
-            
+
+            // NEW: Mention picker
+            if showMentionPicker {
+                MentionPickerView(
+                    participantDetails: conversation.participantDetails,
+                    currentUserId: currentUserId,
+                    onSelect: { userId, displayName in
+                        insertMention(userId: userId, displayName: displayName)
+                    }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(.spring(response: 0.3), value: showMentionPicker)
+            }
+
             // Message input
             MessageInputView(
                 text: $messageText,
@@ -259,6 +274,9 @@ struct ChatView: View {
             )
             .onChange(of: messageText) { _, newValue in
                 viewModel.handleTextChange(newValue, currentUserId: currentUserId)
+
+                // Detect @ mentions
+                detectMentionTrigger(in: newValue)
             }
             }
             
@@ -452,10 +470,13 @@ struct ChatView: View {
     private func sendMessage() {
         let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        
+
+        // Extract mentioned user IDs
+        let mentionedUserIds = extractMentionedUserIds(from: text)
+
         // Get current user info from conversation
         let participant = conversation.participantDetails[currentUserId]
-        
+
         Task {
             await viewModel.sendMessage(
                 text: text,
@@ -463,12 +484,14 @@ struct ChatView: View {
                 senderName: participant?.displayName ?? "You",
                 senderPhotoURL: participant?.photoURL,
                 senderAvatarType: participant?.avatarType,
-                senderAvatarId: participant?.avatarId
+                senderAvatarId: participant?.avatarId,
+                mentionedUserIds: mentionedUserIds.isEmpty ? nil : mentionedUserIds
             )
         }
-        
+
         // Clear input immediately for better UX
         messageText = ""
+        showMentionPicker = false
     }
     
     // MARK: - Smart Response Suggestions
@@ -593,8 +616,63 @@ struct ChatView: View {
         }
     }
     
+    // MARK: - Mention Detection
+
+    /// Detect @ trigger in message text
+    private func detectMentionTrigger(in text: String) {
+        // Check if text ends with @ followed by optional space
+        if text.hasSuffix("@") || (text.contains("@") && text.last == " " && text.dropLast().hasSuffix("@")) {
+            // Only show picker in group chats with multiple participants
+            if conversation.type == .group && conversation.participantIds.count > 2 {
+                showMentionPicker = true
+            }
+        } else if !text.contains("@") {
+            // Hide picker if @ is removed
+            showMentionPicker = false
+        }
+    }
+
+    /// Insert selected mention into message text
+    private func insertMention(userId: String, displayName: String) {
+        // Find the last @ in the text
+        if let lastAtIndex = messageText.lastIndex(of: "@") {
+            // Replace from @ to end with the mention
+            messageText = String(messageText[..<lastAtIndex]) + "@\(displayName) "
+        }
+
+        // Hide picker
+        showMentionPicker = false
+    }
+
+    /// Extract mentioned user IDs from message text
+    private func extractMentionedUserIds(from text: String) -> [String] {
+        var mentionedUserIds: [String] = []
+
+        // Find all @mentions in the text
+        let pattern = "@([^\\s@]+)"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+
+        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+
+        for match in matches {
+            if let range = Range(match.range(at: 1), in: text) {
+                let mentionedName = String(text[range])
+
+                // Find user ID by display name
+                for (userId, participant) in conversation.participantDetails {
+                    if participant.displayName == mentionedName {
+                        mentionedUserIds.append(userId)
+                        break
+                    }
+                }
+            }
+        }
+
+        return mentionedUserIds
+    }
+
     // MARK: - Group Presence Tracking
-    
+
     /// Subscribe to presence for all group members
     private func subscribeToGroupPresence() {
         print("👥 Subscribing to presence for \(conversation.participantIds.count) group members")

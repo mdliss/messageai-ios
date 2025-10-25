@@ -12,6 +12,7 @@ admin.initializeApp();
 // Export notification functions
 // Temporarily commented out - using local notifications in Swift app instead
 // export { sendMessageNotification } from './notifications/sendMessage';
+export { sendMentionNotification } from './notifications/sendMentionNotification';
 
 // Export AI functions
 export { summarizeConversation } from './ai/summarize';

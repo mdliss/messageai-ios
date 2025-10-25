@@ -317,7 +317,8 @@ class ChatViewModel: ObservableObject {
     ///   - senderPhotoURL: Sender photo URL
     ///   - senderAvatarType: Sender avatar type
     ///   - senderAvatarId: Sender avatar ID
-    func sendMessage(text: String, senderId: String, senderName: String, senderPhotoURL: String? = nil, senderAvatarType: AvatarType? = nil, senderAvatarId: String? = nil) async {
+    ///   - mentionedUserIds: User IDs mentioned in the message
+    func sendMessage(text: String, senderId: String, senderName: String, senderPhotoURL: String? = nil, senderAvatarType: AvatarType? = nil, senderAvatarId: String? = nil, mentionedUserIds: [String]? = nil) async {
         guard let conversationId = conversationId else {
             errorMessage = "No conversation selected"
             return
@@ -346,7 +347,8 @@ class ChatViewModel: ObservableObject {
             createdAt: Date(),
             status: .sending,
             localId: localId,
-            isSynced: false
+            isSynced: false,
+            mentionedUserIds: mentionedUserIds
         )
         
         // Optimistic UI - add message immediately

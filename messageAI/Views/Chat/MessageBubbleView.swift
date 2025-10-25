@@ -161,18 +161,70 @@ struct MessageBubbleView: View {
     }
     
     // MARK: - Text Bubble
-    
+
     private var textBubble: some View {
-        Text(message.text)
+        styledMessageText
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(bubbleColor)
-            .foregroundStyle(isFromCurrentUser ? .white : .primary)
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(priorityBorderColor, lineWidth: message.priority != nil ? 2 : 0)
             )
+    }
+
+    /// Styled text with @mentions highlighted
+    private var styledMessageText: Text {
+        let text = message.text
+        let pattern = "@([^\\s@]+)"
+
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return Text(text)
+                .foregroundStyle(isFromCurrentUser ? .white : .primary)
+        }
+
+        let matches = regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+
+        // If no mentions, return plain text
+        guard !matches.isEmpty else {
+            return Text(text)
+                .foregroundStyle(isFromCurrentUser ? .white : .primary)
+        }
+
+        // Build attributed text with styled mentions
+        var result = Text("")
+        var lastIndex = text.startIndex
+
+        for match in matches {
+            // Add text before the mention
+            if let range = Range(match.range, in: text) {
+                let beforeText = String(text[lastIndex..<range.lowerBound])
+                if !beforeText.isEmpty {
+                    result = result + Text(beforeText)
+                        .foregroundStyle(isFromCurrentUser ? .white : .primary)
+                }
+
+                // Add the mention with special styling
+                let mention = String(text[range])
+                result = result + Text(mention)
+                    .font(.system(.body, design: .monospaced))
+                    .fontWeight(.semibold)
+                    .foregroundStyle(isFromCurrentUser ? Color.white.opacity(0.95) : Color.blue)
+                    .underline()
+
+                lastIndex = range.upperBound
+            }
+        }
+
+        // Add remaining text after last mention
+        if lastIndex < text.endIndex {
+            let remainingText = String(text[lastIndex...])
+            result = result + Text(remainingText)
+                .foregroundStyle(isFromCurrentUser ? .white : .primary)
+        }
+
+        return result
     }
     
     /// Priority border color based on priority level
