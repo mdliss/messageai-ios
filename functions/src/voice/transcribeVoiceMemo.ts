@@ -39,12 +39,13 @@ export const transcribeVoiceMemo = functions.firestore
     console.log(`🎤 New voice message ${messageId}, starting transcription...`);
 
     try {
-      // SECURITY: Get API key from environment variable (NEVER hardcode)
-      const apiKey = process.env.OPENAI_API_KEY;
+      // SECURITY: Get API key from Firebase config (NEVER hardcode)
+      const apiKey = functions.config().openai?.key;
       if (!apiKey) {
-        console.error('❌ OPENAI_API_KEY not set in environment');
+        console.error('❌ OpenAI API key not set in Firebase config');
         throw new Error('OpenAI API key not configured');
       }
+      console.log('✅ OpenAI API key loaded from config');
 
       // Download audio file from Firebase Storage
       const bucket = admin.storage().bucket();
@@ -144,10 +145,11 @@ export const retranscribeVoiceMemo = functions.https.onCall(async (data, context
     }
 
     // Same transcription logic as onCreate
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = functions.config().openai?.key;
     if (!apiKey) {
       throw new functions.https.HttpsError('internal', 'OpenAI API key not configured');
     }
+    console.log('✅ OpenAI API key loaded from config');
 
     const bucket = admin.storage().bucket();
     const file = bucket.file(message.voiceURL);
