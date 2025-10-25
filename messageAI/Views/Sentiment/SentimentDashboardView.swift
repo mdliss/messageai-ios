@@ -260,23 +260,9 @@ struct MemberSentimentCard: View {
             
             // Member info
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(sentiment.userName)
-                        .font(.headline)
-                    
-                    Spacer()
-                    
-                    // Trend indicator
-                    HStack(spacing: 4) {
-                        Image(systemName: sentiment.trend.icon)
-                            .font(.caption)
-                            .foregroundColor(sentiment.trend.color)
-                        Text(sentiment.trend.displayName)
-                            .font(.caption)
-                            .foregroundColor(sentiment.trend.color)
-                    }
-                }
-                
+                Text(sentiment.userName)
+                    .font(.headline)
+
                 // Sentiment category
                 Text(sentiment.sentimentCategory)
                     .font(.subheadline)

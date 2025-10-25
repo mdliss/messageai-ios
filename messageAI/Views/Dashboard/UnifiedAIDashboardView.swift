@@ -7,14 +7,16 @@
 //
 
 import SwiftUI
+import FirebaseFirestore
 
 /// Unified AI dashboard showing all AI features
 struct UnifiedAIDashboardView: View {
     let currentUserId: String
-    
+
     @State private var blockerCount: Int = 0
     @State private var suggestionsAvailable: Int = 0
     @State private var teamSentimentScore: Double = 0.0
+    @State private var groupConversationId: String?
     
     var body: some View {
         NavigationView {
@@ -22,8 +24,6 @@ struct UnifiedAIDashboardView: View {
                 VStack(spacing: 20) {
                     // Header
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("ai insights")
-                            .font(.largeTitle.bold())
                         Text("your ai powered team management assistant")
                             .font(.caption)
                             .foregroundColor(.secondary)
@@ -58,14 +58,28 @@ struct UnifiedAIDashboardView: View {
                         }
                         .buttonStyle(.plain)
                         
-                        // Team sentiment (info only - need conversation selection)
-                        DashboardCardView(
-                            icon: "heart.fill",
-                            iconColor: sentimentColor,
-                            title: "team sentiment",
-                            subtitle: sentimentCategory,
-                            description: "view sentiment in group chat menus"
-                        )
+                        // Team sentiment - NavigationLink to sentiment dashboard
+                        if let conversationId = groupConversationId {
+                            NavigationLink(destination: SentimentDashboardView(conversationId: conversationId)) {
+                                DashboardCardView(
+                                    icon: "heart.fill",
+                                    iconColor: sentimentColor,
+                                    title: "team sentiment",
+                                    subtitle: sentimentCategory,
+                                    description: "tap to view team sentiment analysis"
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            DashboardCardView(
+                                icon: "heart.fill",
+                                iconColor: .gray,
+                                title: "team sentiment",
+                                subtitle: "no group chats",
+                                description: "join or create a group chat to see sentiment",
+                                showChevron: false
+                            )
+                        }
                     }
                     .padding(.horizontal)
                     
@@ -73,11 +87,11 @@ struct UnifiedAIDashboardView: View {
                         .padding()
                     
                     // ============================================
-                    // EXISTING AI FEATURES
+                    // OTHER AI FEATURES
                     // ============================================
-                    
+
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("existing ai features")
+                        Text("other features")
                             .font(.headline)
                             .foregroundColor(.secondary)
                             .padding(.horizontal)
@@ -180,13 +194,66 @@ struct UnifiedAIDashboardView: View {
     // MARK: - Helper Methods
     
     private func loadDashboardData() async {
-        print("📊 loading unified dashboard data...")
-        
+        print("📊 [DASHBOARD] loading unified dashboard data...")
+
+        // Load the most recent group conversation for sentiment analysis
+        do {
+            let db = Firestore.firestore()
+
+            // Find first group conversation where user is a participant
+            print("🔍 [DASHBOARD] searching for group conversations...")
+            let conversationsSnapshot = try await db.collection("conversations")
+                .whereField("participantIds", arrayContains: currentUserId)
+                .whereField("type", isEqualTo: "group")
+                .getDocuments()
+
+            if let firstConversation = conversationsSnapshot.documents.first {
+                groupConversationId = firstConversation.documentID
+                print("✅ [DASHBOARD] found group conversation: \(firstConversation.documentID)")
+
+                // Load today's sentiment aggregate
+                await loadTodaysSentiment(conversationId: firstConversation.documentID)
+            } else {
+                print("⚠️ [DASHBOARD] no group conversations found for user")
+                groupConversationId = nil
+            }
+        } catch {
+            print("❌ [DASHBOARD] error loading group conversation: \(error)")
+            groupConversationId = nil
+        }
+
         // TODO: Load actual counts from Firestore
-        // For now, using stub data
         blockerCount = 0
         suggestionsAvailable = 0
-        teamSentimentScore = 0.0
+    }
+
+    private func loadTodaysSentiment(conversationId: String) async {
+        print("📊 [DASHBOARD] loading today's sentiment for preview...")
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let todayStr = dateFormatter.string(from: Date())
+
+        do {
+            let db = Firestore.firestore()
+            let doc = try await db
+                .collection("sentimentTracking")
+                .document("teamDaily")
+                .collection("aggregates")
+                .document("\(todayStr)_\(conversationId)")
+                .getDocument()
+
+            if let sentiment = doc.data()?["averageSentiment"] as? Double {
+                teamSentimentScore = sentiment
+                print("✅ [DASHBOARD] loaded sentiment preview: \(sentiment)")
+            } else {
+                print("⚠️ [DASHBOARD] no sentiment data for today yet")
+                teamSentimentScore = 0.0
+            }
+        } catch {
+            print("❌ [DASHBOARD] error loading sentiment preview: \(error)")
+            teamSentimentScore = 0.0
+        }
     }
 }
 

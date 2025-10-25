@@ -26,6 +26,7 @@ export { ragSearch } from './ai/ragSearch';
 
 // Export Advanced AI features
 export { generateResponseSuggestions } from './ai/responseSuggestions';
+export { sendTestTriggerMessage } from './test/sendTestMessage';
 export { detectBlocker, onMessageCreatedCheckBlocker } from './ai/blockerDetection';
 export { analyzeSentiment, onMessageCreatedAnalyzeSentiment, calculateSentimentAggregates } from './ai/sentiment';
 export { manualAggregateSentiment } from './ai/manualSentimentAggregation';
