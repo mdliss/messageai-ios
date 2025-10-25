@@ -63,7 +63,10 @@ export const summarizeConversation = functions
       
       // Format messages as transcript
       const messages = messagesSnapshot.docs
-        .map(doc => doc.data() as Message)
+        .map(doc => ({
+          ...doc.data() as Message,
+          id: doc.id  // Ensure ID is set from document ID
+        }))
         .reverse(); // Chronological order
       
       const transcript = messages.map(msg => {
@@ -128,7 +131,7 @@ ${transcript}`,
           bulletPoints: 3,
           messageCount: messages.length,
         },
-        messageIds: messages.map(m => m.id),
+        messageIds: messages.map(m => m.id).filter(id => id !== undefined),  // Filter out any undefined IDs
         triggeredBy: context.auth.uid,  // Client uses this to filter
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         dismissed: false,

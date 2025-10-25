@@ -678,7 +678,7 @@ class ChatViewModel: ObservableObject {
         }
         
         do {
-            let functions = Functions.functions()
+            let functions = FirebaseConfig.shared.functions
             let result = try await functions.httpsCallable("ragSearch").call([
                 "conversationId": conversationId,
                 "query": query,

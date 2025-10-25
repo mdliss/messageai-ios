@@ -20,7 +20,7 @@ class ActionItemsViewModel: ObservableObject {
     @Published var errorMessage: String?
     
     private let db = FirebaseConfig.shared.db
-    private let functions = Functions.functions()
+    private let functions = FirebaseConfig.shared.functions
     private var listener: ListenerRegistration?
     
     // MARK: - Load Action Items

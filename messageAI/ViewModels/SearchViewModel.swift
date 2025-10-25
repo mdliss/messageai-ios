@@ -36,7 +36,7 @@ class SearchViewModel: ObservableObject {
     @Published var ragAnswers: [String: String] = [:]  // NEW: Conversation ID -> RAG answer
     
     private let coreDataService = CoreDataService.shared
-    private let functions = Functions.functions()
+    private let functions = FirebaseConfig.shared.functions
     
     // MARK: - Search
     

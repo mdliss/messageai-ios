@@ -18,9 +18,9 @@ class ResponseSuggestionsViewModel: ObservableObject {
     @Published var suggestions: [ResponseSuggestion] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    
-    private let functions = Functions.functions()
-    private let db = Firestore.firestore()
+
+    private let functions = FirebaseConfig.shared.functions
+    private let db = FirebaseConfig.shared.db
     
     /// Generate response suggestions for a message
     /// - Parameters:

@@ -19,7 +19,7 @@ class AIInsightsViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let functions = Functions.functions()
+    private let functions = FirebaseConfig.shared.functions
     private let db = FirebaseConfig.shared.db
     
     private var insightsTask: Task<Void, Never>?

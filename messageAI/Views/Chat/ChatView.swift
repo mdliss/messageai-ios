@@ -390,14 +390,20 @@ struct ChatView: View {
             }
         }
         .onChange(of: viewModel.messages.count) { oldCount, newCount in
+            print("🔔 [SUGGESTIONS] onChange triggered!")
+            print("   Old count: \(oldCount), New count: \(newCount)")
+            print("   Messages array count: \(viewModel.messages.count)")
+
             // Check if new message arrived that needs response
             guard newCount > oldCount,
                   let lastMessage = viewModel.messages.last else {
+                print("   ❌ no new message or count didn't increase")
                 return
             }
-            
+
             print("📬 new message arrived, checking if suggestions needed...")
-            
+            print("   Last message: \(lastMessage.text)")
+
             // Auto-generate suggestions if message needs response
             if shouldGenerateSuggestions(for: lastMessage) {
                 print("✅ message needs response, generating suggestions...")
@@ -480,21 +486,36 @@ struct ChatView: View {
     
     /// Check if a message should trigger response suggestions
     private func shouldGenerateSuggestions(for message: Message) -> Bool {
+        print("🔍 [SUGGESTIONS] checking message for trigger conditions...")
+        print("   Message ID: \(message.id)")
+        print("   Sender ID: \(message.senderId)")
+        print("   Current User ID: \(currentUserId)")
+        print("   Text: \(message.text)")
+        print("   Type: \(message.type)")
+
         // Don't suggest for messages from current user
-        guard message.senderId != currentUserId else { return false }
-        
+        guard message.senderId != currentUserId else {
+            print("   ❌ message from current user - skipping")
+            return false
+        }
+
         // Don't suggest for image messages
-        guard message.type == .text else { return false }
-        
+        guard message.type == .text else {
+            print("   ❌ not a text message - skipping")
+            return false
+        }
+
         let text = message.text.lowercased()
-        
+        print("   Text (lowercase): \(text)")
+
         // Trigger conditions:
-        
+
         // 1. Message ends with question mark
         if text.hasSuffix("?") {
+            print("   ✅ TRIGGER: ends with '?'")
             return true
         }
-        
+
         // 2. Contains request keywords
         let requestKeywords = [
             "can we", "can you", "could we", "could you",
@@ -503,26 +524,30 @@ struct ChatView: View {
             "waiting for", "waiting on",
             "what do you think", "thoughts on", "your thoughts"
         ]
-        
+
         for keyword in requestKeywords {
             if text.contains(keyword) {
+                print("   ✅ TRIGGER: contains keyword '\(keyword)'")
                 return true
             }
         }
-        
+
         // 3. Message is flagged as priority
         if message.priority == .urgent || message.priority == .high {
+            print("   ✅ TRIGGER: priority message (\(message.priority))")
             return true
         }
-        
+
         // Don't suggest for informational messages
         let fyiKeywords = ["fyi", "for your information", "just letting you know", "heads up"]
         for keyword in fyiKeywords {
             if text.contains(keyword) {
+                print("   ❌ FYI keyword found - skipping")
                 return false
             }
         }
-        
+
+        print("   ❌ no trigger conditions met")
         return false
     }
     

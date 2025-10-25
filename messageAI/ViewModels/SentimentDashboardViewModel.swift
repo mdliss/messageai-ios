@@ -22,7 +22,7 @@ class SentimentDashboardViewModel: ObservableObject {
     @Published var errorMessage: String?
     
     private let db = Firestore.firestore()
-    private let functions = Functions.functions()
+    private let functions = FirebaseConfig.shared.functions
 
     /// Team sentiment score on 0-100 scale
     var displayScore: Int {
