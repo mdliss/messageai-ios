@@ -345,26 +345,26 @@ class DecisionsViewModel: ObservableObject {
     func cancelPoll(decision: AIInsight, userId: String) async {
         do {
             print("🚫 cancelling poll \(decision.id) for user \(userId)")
-            
+
             let insightRef = db.collection("conversations")
                 .document(decision.conversationId)
                 .collection("insights")
                 .document(decision.id)
-            
+
             // update poll to cancelled
             try await insightRef.updateData([
                 "metadata.pollStatus": "cancelled",
                 "dismissed": true
             ])
-            
+
             print("✅ poll cancelled successfully")
-            
+
             // post system message
             let messageRef = db.collection("conversations")
                 .document(decision.conversationId)
                 .collection("messages")
                 .document()
-            
+
             let messageData: [String: Any] = [
                 "id": messageRef.documentID,
                 "conversationId": decision.conversationId,
@@ -382,14 +382,57 @@ class DecisionsViewModel: ObservableObject {
                 "isSynced": true,
                 "priority": false
             ]
-            
+
             try await messageRef.setData(messageData)
-            
+
             print("✅ cancellation message posted")
-            
+
         } catch {
             errorMessage = "failed to cancel poll: \(error.localizedDescription)"
             print("❌ failed to cancel poll: \(error.localizedDescription)")
+        }
+    }
+
+    /// Delete poll or decision permanently
+    /// - Parameters:
+    ///   - decision: The decision/poll to delete
+    ///   - userId: Current user ID
+    func deleteDecision(decision: AIInsight, userId: String) async {
+        do {
+            print("🗑️ deleting decision \(decision.id) for user \(userId)")
+
+            let insightRef = db.collection("conversations")
+                .document(decision.conversationId)
+                .collection("insights")
+                .document(decision.id)
+
+            // Delete the document
+            try await insightRef.delete()
+
+            print("✅ decision deleted successfully")
+
+            // Remove from local array immediately (optimistic UI)
+            decisions.removeAll { $0.id == decision.id }
+
+            // If this was a poll that created a consensus decision, also delete that
+            if let metadata = decision.metadata, metadata.isPoll == true {
+                // Find and delete any consensus decisions created from this poll
+                let consensusDecisions = decisions.filter { $0.metadata?.pollId == decision.id }
+                for consensusDecision in consensusDecisions {
+                    let consensusRef = db.collection("conversations")
+                        .document(consensusDecision.conversationId)
+                        .collection("insights")
+                        .document(consensusDecision.id)
+
+                    try await consensusRef.delete()
+                    decisions.removeAll { $0.id == consensusDecision.id }
+                    print("✅ deleted related consensus decision \(consensusDecision.id)")
+                }
+            }
+
+        } catch {
+            errorMessage = "failed to delete: \(error.localizedDescription)"
+            print("❌ failed to delete decision: \(error.localizedDescription)")
         }
     }
     

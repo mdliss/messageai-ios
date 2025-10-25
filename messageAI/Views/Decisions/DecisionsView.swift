@@ -12,7 +12,9 @@ struct DecisionsView: View {
     @EnvironmentObject var authViewModel: AuthViewModel
     @StateObject private var viewModel = DecisionsViewModel()
     @State private var searchText = ""
-    
+    @State private var decisionToDelete: AIInsight?
+    @State private var showDeleteConfirmation = false
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -43,6 +45,14 @@ struct DecisionsView: View {
                                 ForEach(filteredDecisions(in: dateGroup.value)) { decision in
                                     DecisionRowView(decision: decision)
                                         .environmentObject(viewModel)
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            Button(role: .destructive) {
+                                                decisionToDelete = decision
+                                                showDeleteConfirmation = true
+                                            } label: {
+                                                Label("delete", systemImage: "trash")
+                                            }
+                                        }
                                 }
                             }
                         }
@@ -68,6 +78,34 @@ struct DecisionsView: View {
                 }
             } message: {
                 Text(viewModel.errorMessage ?? "")
+            }
+            .confirmationDialog(
+                "delete decision?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible,
+                presenting: decisionToDelete
+            ) { decision in
+                Button("delete", role: .destructive) {
+                    Task {
+                        if let userId = authViewModel.currentUser?.id {
+                            await viewModel.deleteDecision(decision: decision, userId: userId)
+                        }
+                    }
+                }
+                Button("cancel", role: .cancel) {
+                    decisionToDelete = nil
+                }
+            } message: { decision in
+                let isPoll = decision.metadata?.isPoll == true
+                let isFinalized = decision.metadata?.finalized == true
+
+                if isPoll && isFinalized {
+                    Text("this will permanently delete the poll and its final decision")
+                } else if isPoll {
+                    Text("this will permanently delete the poll")
+                } else {
+                    Text("this will permanently delete this decision")
+                }
             }
         }
     }
