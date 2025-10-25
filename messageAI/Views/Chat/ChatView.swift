@@ -40,9 +40,11 @@ struct ChatView: View {
     
     private let realtimeDBService = RealtimeDBService.shared
     
-    // Computed online count from statuses
+    // Computed online count from statuses (includes current user + others)
     private var onlineCount: Int {
-        onlineStatuses.values.filter { $0 == true }.count
+        // Count other users who are online, plus current user (always online)
+        let othersOnline = onlineStatuses.values.filter { $0 == true }.count
+        return othersOnline + 1  // +1 for current user
     }
     
     // Computed property for filtered messages
@@ -269,6 +271,9 @@ struct ChatView: View {
                 onImageTap: {
                     showImagePicker = true
                 },
+                onVoiceSend: { url, duration in
+                    sendVoiceMessage(audioURL: url, duration: duration)
+                },
                 isSending: viewModel.isSending,
                 isUploadingImage: viewModel.isUploadingImage
             )
@@ -493,7 +498,26 @@ struct ChatView: View {
         messageText = ""
         showMentionPicker = false
     }
-    
+
+    // MARK: - Send Voice Message
+
+    private func sendVoiceMessage(audioURL: URL, duration: TimeInterval) {
+        // Get current user info from conversation
+        let participant = conversation.participantDetails[currentUserId]
+
+        Task {
+            await viewModel.sendVoiceMessage(
+                audioURL: audioURL,
+                duration: duration,
+                senderId: currentUserId,
+                senderName: participant?.displayName ?? "You",
+                senderPhotoURL: participant?.photoURL,
+                senderAvatarType: participant?.avatarType,
+                senderAvatarId: participant?.avatarId
+            )
+        }
+    }
+
     // MARK: - Smart Response Suggestions
     
     /// Check if a message should trigger response suggestions
@@ -692,8 +716,9 @@ struct ChatView: View {
                     await MainActor.run {
                         onlineStatuses[userId] = isOnline
                         
-                        let onlineNow = onlineStatuses.values.filter { $0 == true }.count
-                        print("👥 Presence update: user \(userId) is \(isOnline ? "ONLINE" : "OFFLINE"), total online: \(onlineNow)/\(otherParticipants.count)")
+                        let othersOnline = onlineStatuses.values.filter { $0 == true }.count
+                        let totalOnline = othersOnline + 1  // +1 for current user
+                        print("👥 Presence update: user \(userId) is \(isOnline ? "ONLINE" : "OFFLINE"), total online: \(totalOnline)/\(conversation.participantIds.count)")
                     }
                 }
             }

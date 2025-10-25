@@ -116,6 +116,8 @@ struct MessageBubbleView: View {
                     textBubble
                 } else if message.type == .image {
                     imageBubble
+                } else if message.type == .voice {
+                    voiceBubble
                 }
                 
                 // Timestamp and status
@@ -244,7 +246,7 @@ struct MessageBubbleView: View {
     }
     
     // MARK: - Image Bubble
-    
+
     private var imageBubble: some View {
         VStack(alignment: isFromCurrentUser ? .trailing : .leading, spacing: 4) {
             if let imageURL = message.imageURL, let url = URL(string: imageURL) {
@@ -263,7 +265,7 @@ struct MessageBubbleView: View {
                         }
                 }
             }
-            
+
             if !message.text.isEmpty {
                 Text(message.text)
                     .padding(.horizontal, 12)
@@ -273,6 +275,14 @@ struct MessageBubbleView: View {
                     .cornerRadius(16)
             }
         }
+    }
+
+    // MARK: - Voice Bubble
+
+    private var voiceBubble: some View {
+        VoiceMessageView(message: message, isFromCurrentUser: isFromCurrentUser)
+            .background(bubbleColor)
+            .cornerRadius(16)
     }
     
     // MARK: - Avatar

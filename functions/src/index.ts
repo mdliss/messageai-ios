@@ -32,5 +32,8 @@ export { detectBlocker, onMessageCreatedCheckBlocker } from './ai/blockerDetecti
 export { analyzeSentiment, onMessageCreatedAnalyzeSentiment, calculateSentimentAggregates } from './ai/sentiment';
 export { manualAggregateSentiment } from './ai/manualSentimentAggregation';
 
+// Export Voice features
+export { transcribeVoiceMemo, retranscribeVoiceMemo } from './voice/transcribeVoiceMemo';
+
 console.log('✅ MessageAI Cloud Functions initialized');
 

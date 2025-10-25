@@ -21,13 +21,16 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
     let type: MessageType
     let text: String
     let imageURL: String?
-    
+    let voiceURL: String?  // NEW: Firebase Storage path for voice memo
+    var transcription: String?  // NEW: Transcription from OpenAI Whisper
+    var duration: TimeInterval?  // NEW: Voice memo duration in seconds
+
     let createdAt: Date
-    
+
     var status: MessageStatus
     var deliveredTo: [String]
     var readBy: [String]
-    
+
     var localId: String?
     var isSynced: Bool
     var priority: MessagePriority?  // NEW: Priority level (urgent, high, normal)
@@ -43,8 +46,11 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
          senderAvatarType: AvatarType? = nil,
          senderAvatarId: String? = nil,
          type: MessageType = .text,
-         text: String,
+         text: String = "",
          imageURL: String? = nil,
+         voiceURL: String? = nil,
+         transcription: String? = nil,
+         duration: TimeInterval? = nil,
          createdAt: Date = Date(),
          status: MessageStatus = .sending,
          deliveredTo: [String] = [],
@@ -64,6 +70,9 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         self.type = type
         self.text = text
         self.imageURL = imageURL
+        self.voiceURL = voiceURL
+        self.transcription = transcription
+        self.duration = duration
         self.createdAt = createdAt
         self.status = status
         self.deliveredTo = deliveredTo
@@ -115,6 +124,15 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
         if let mentionedUserIds = mentionedUserIds {
             dict["mentionedUserIds"] = mentionedUserIds
         }
+        if let voiceURL = voiceURL {
+            dict["voiceURL"] = voiceURL
+        }
+        if let transcription = transcription {
+            dict["transcription"] = transcription
+        }
+        if let duration = duration {
+            dict["duration"] = duration
+        }
 
         return dict
     }
@@ -139,6 +157,11 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
             return text
         case .image:
             return "📷 Photo"
+        case .voice:
+            if let transcription = transcription, !transcription.isEmpty {
+                return "🎤 \(transcription)"
+            }
+            return "🎤 Voice message"
         }
     }
 }
@@ -147,6 +170,7 @@ struct Message: Codable, Identifiable, Equatable, Hashable {
 enum MessageType: String, Codable, CaseIterable {
     case text
     case image
+    case voice
 }
 
 /// Message status enum

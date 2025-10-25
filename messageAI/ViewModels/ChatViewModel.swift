@@ -483,7 +483,96 @@ class ChatViewModel: ObservableObject {
         
         isUploadingImage = false
     }
-    
+
+    // MARK: - Send Voice Message
+
+    /// Send voice message with audio file upload
+    /// - Parameters:
+    ///   - audioURL: Local file URL of recorded audio
+    ///   - duration: Duration of the recording in seconds
+    ///   - senderId: Sender user ID
+    ///   - senderName: Sender display name
+    ///   - senderPhotoURL: Sender photo URL
+    ///   - senderAvatarType: Sender avatar type
+    ///   - senderAvatarId: Sender avatar ID
+    func sendVoiceMessage(audioURL: URL, duration: TimeInterval, senderId: String, senderName: String, senderPhotoURL: String? = nil, senderAvatarType: AvatarType? = nil, senderAvatarId: String? = nil) async {
+        print("[VOICE] 📨 sendVoiceMessage() called")
+        print("[VOICE] 📍 Audio URL: \(audioURL.path)")
+        print("[VOICE] ⏱️ Duration: \(String(format: "%.1f", duration))s")
+
+        guard let conversationId = conversationId else {
+            print("[VOICE] ❌ No conversation selected")
+            errorMessage = "No conversation selected"
+            return
+        }
+
+        print("[VOICE] 💬 Conversation ID: \(conversationId)")
+        isSending = true
+
+        // Generate local ID
+        let localId = UUID().uuidString
+
+        // Check if we're offline - can't upload voice memos offline
+        if !networkMonitor.isConnected {
+            print("[VOICE] 📡 Offline: Cannot upload voice message")
+            errorMessage = "Cannot send voice messages while offline. Please reconnect and try again"
+            isSending = false
+            return
+        }
+        print("[VOICE] 📡 Network connected")
+
+        do {
+            // Upload audio to Firebase Storage at: voice-memos/{conversationId}/{messageId}.m4a
+            let storagePath = "voice-memos/\(conversationId)/\(localId).m4a"
+            print("[VOICE] 📤 Uploading voice memo to Storage...")
+            print("[VOICE] 📁 Storage path: \(storagePath)")
+
+            _ = try await storageService.uploadVoiceMemo(audioURL: audioURL, path: storagePath)
+
+            print("[VOICE] ✅ Voice memo uploaded successfully to: \(storagePath)")
+
+            // Create message with voice type
+            let message = Message(
+                id: localId,
+                conversationId: conversationId,
+                senderId: senderId,
+                senderName: senderName,
+                senderPhotoURL: senderPhotoURL,
+                senderAvatarType: senderAvatarType,
+                senderAvatarId: senderAvatarId,
+                type: .voice,
+                text: "",  // Empty for voice messages
+                voiceURL: storagePath,  // Storage path, not download URL
+                duration: duration,
+                createdAt: Date(),
+                status: .sending,
+                localId: localId,
+                isSynced: false
+            )
+
+            // Add to Firestore using service method
+            print("[VOICE] 💾 Saving message to Firestore...")
+            _ = try await firestoreService.sendMessage(message, to: conversationId)
+
+            print("[VOICE] ✅ Voice message sent successfully: \(localId)")
+
+            // Cloud Function will automatically trigger transcription
+            print("[VOICE] 🤖 Cloud Function will handle transcription")
+
+            // Clean up local temporary file
+            print("[VOICE] 🧹 Deleting temporary audio file...")
+            try? FileManager.default.removeItem(at: audioURL)
+            print("[VOICE] ✅ Temporary audio file deleted")
+
+        } catch {
+            print("[VOICE] ❌ Failed to send voice message: \(error.localizedDescription)")
+            errorMessage = "Failed to send voice message: \(error.localizedDescription)"
+        }
+
+        isSending = false
+        print("[VOICE] ✅ sendVoiceMessage() completed")
+    }
+
     // MARK: - Mark Messages as Read
     
     /// Mark visible messages as read

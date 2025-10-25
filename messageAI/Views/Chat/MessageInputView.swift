@@ -12,11 +12,12 @@ struct MessageInputView: View {
     @Binding var text: String
     let onSend: () -> Void
     let onImageTap: () -> Void
+    let onVoiceSend: (URL, TimeInterval) -> Void
     let isSending: Bool
     let isUploadingImage: Bool
-    
+
     @FocusState private var isFocused: Bool
-    
+
     var body: some View {
         HStack(spacing: 12) {
             // Image button
@@ -40,25 +41,38 @@ struct MessageInputView: View {
                 .focused($isFocused)
                 .disabled(isSending)
             
-            // Send button
-            Button {
-                handleSend()
-            } label: {
-                Group {
-                    if isSending || isUploadingImage {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "arrow.up")
-                            .fontWeight(.semibold)
+            // Send or Voice button
+            if isSendEnabled {
+                // Send button (when text is entered)
+                Button {
+                    handleSend()
+                } label: {
+                    Group {
+                        if isSending || isUploadingImage {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.up")
+                                .fontWeight(.semibold)
+                        }
                     }
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(Color.blue)
+                    .clipShape(Circle())
                 }
-                .foregroundStyle(.white)
-                .frame(width: 32, height: 32)
-                .background(isSendEnabled ? Color.blue : Color.gray)
-                .clipShape(Circle())
+                .disabled(isSending || isUploadingImage)
+            } else {
+                // Voice button (when no text)
+                VoiceRecorderView(
+                    onSend: { url, duration in
+                        onVoiceSend(url, duration)
+                    },
+                    onCancel: {
+                        // Just dismiss
+                    }
+                )
             }
-            .disabled(!isSendEnabled || isSending || isUploadingImage)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -85,11 +99,12 @@ struct MessageInputView: View {
 #Preview {
     VStack {
         Spacer()
-        
+
         MessageInputView(
             text: .constant(""),
             onSend: {},
             onImageTap: {},
+            onVoiceSend: { _, _ in },
             isSending: false,
             isUploadingImage: false
         )

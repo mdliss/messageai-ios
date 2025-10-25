@@ -64,8 +64,37 @@ class StorageService {
         let timestamp = Int(Date().timeIntervalSince1970)
         let filename = "\(timestamp)_\(UUID().uuidString).jpg"
         let path = "images/\(conversationId)/\(filename)"
-        
+
         return try await uploadImage(image, path: path)
+    }
+
+    // MARK: - Voice Upload
+
+    /// Upload voice memo to Firebase Storage
+    /// - Parameters:
+    ///   - audioURL: Local file URL of audio recording
+    ///   - path: Storage path (e.g., "voice-memos/conversationId/messageId.m4a")
+    /// - Returns: Storage path (not download URL)
+    func uploadVoiceMemo(audioURL: URL, path: String) async throws -> String {
+        // Read audio data
+        let audioData = try Data(contentsOf: audioURL)
+
+        // Create storage reference
+        let storageRef = storage.reference().child(path)
+
+        // Set metadata
+        let metadata = StorageMetadata()
+        metadata.contentType = "audio/m4a"
+
+        // Upload
+        do {
+            _ = try await storageRef.putDataAsync(audioData, metadata: metadata)
+            print("✅ Voice memo uploaded: \(path)")
+            return path
+        } catch {
+            print("❌ Voice memo upload failed: \(error.localizedDescription)")
+            throw StorageError.uploadFailed(error)
+        }
     }
     
     // MARK: - Image Delete
